@@ -1,9 +1,10 @@
 import tensorflow as tf
 import numpy as np
-import horovod.tensorflow as hvd
+# import horovod.tensorflow as hvd
 
 
 def k(x):
+    """Don't use kernels smaller than actual size."""
     if x < 3:
         return 1
     else:
@@ -11,6 +12,7 @@ def k(x):
 
 
 def calculate_gain(activation, param=None):
+    """Calculate by how much weights should be adjusted to retain sufficient input size."""
     linear_fns = ['linear', 'conv1d', 'conv2d', 'conv3d', 'conv_transpose1d', 'conv_transpose2d', 'conv_transpose3d']
     if activation in linear_fns or activation == 'sigmoid':
         return 1
@@ -31,25 +33,23 @@ def calculate_gain(activation, param=None):
 
 
 def get_weight(shape, activation, lrmul=1, use_eq_lr=False, param=None):
+    """Get a weight variable."""
     fan_in = np.prod(shape[:-1])
     gain = calculate_gain(activation, param)
     he_std = gain / np.sqrt(fan_in)
     runtime_coef = he_std * lrmul
     init_std = 1 / runtime_coef if use_eq_lr else 1 / lrmul
-
     w = tf.get_variable('weight', shape=shape,
-                        initializer=tf.initializers.random_normal(0, init_std))
+                            initializer=tf.initializers.random_normal(0, init_std))
 
     if use_eq_lr:
         w *= runtime_coef
 
-    return w, runtime_coef
+    return w
 
 
-def apply_bias(x, runtime_coef, use_eq_lr=False):
-    b = tf.get_variable('bias', shape=[x.shape[1]], initializer=tf.initializers.random_normal())
-    if use_eq_lr:
-        b *= runtime_coef
+def apply_bias(x, lrmul=1):
+    b = tf.get_variable('bias', shape=[x.shape[1]], initializer=tf.initializers.random_normal()) * lrmul
     b = tf.cast(b, x.dtype)
     if len(x.shape) == 2:
         return x + b
@@ -60,15 +60,50 @@ def apply_bias(x, runtime_coef, use_eq_lr=False):
 def dense(x, fmaps, activation, lrmul=1, param=None):
     if len(x.shape) > 2:
         x = tf.reshape(x, [-1, np.prod([d.value for d in x.shape[1:]])])
-    w, runtime_coef = get_weight([x.shape[1].value, fmaps], activation, lrmul=lrmul, param=param)
-    w = tf.cast(w, x.dtype)
-    return tf.matmul(x, w), runtime_coef
+    w = get_weight([x.shape[1].value, fmaps], activation, lrmul=lrmul, param=param)
+    return tf.matmul(x, w)
+
+
+def conv2d(x, fmaps, kernel, activation, param=None, lrmul=1):
+    print()
+    print("Shape = " + str(x.shape))
+    print("Kernel = " + str(kernel))
+
+    w = get_weight([*kernel, x.shape[1].value, fmaps], activation, param=param, lrmul=lrmul)
+    print("Weight = " + str(w.shape))
+    return tf.nn.conv2d(x, w, strides=[1, 1, 1, 1], padding='SAME', data_format='NCHW')
+
+
+def conv2d_transpose(x, fmaps, kernel, activation, param=None, lrmul=1):
+    print()
+    print("Shape = " + str(x.shape))
+    print("Kernel = " + str(kernel))
+
+    output_shape = tf.stack([x.shape[0].value, fmaps, int(x.shape[2].value*2), int(x.shape[2].value*2)])
+
+    w = get_weight([*kernel, x.shape[1].value, fmaps], activation, param=param, lrmul=lrmul)
+    print("Weight = " + str(w.shape))
+    return tf.nn.conv2d_transpose(x, w, output_shape, strides=[2, 2], padding='SAME', data_format='NCHW')
+
+
+     # tf.nn.conv2d_transpose(
+     #     input,
+     #     filters,
+     #     output_shape,
+     #     strides,
+     #     padding='SAME',
+     #     data_format='NHWC',
+     #     dilations=None,
+     #     name=None
+     #)
+
+def maxpool2d(x, pool_size, strides, padding, data_format):
+    return tf.nn.max_pool2d(x, pool_size, strides, padding, data_format)
 
 
 def conv3d(x, fmaps, kernel, activation, param=None, lrmul=1):
-    w, runtime_coef = get_weight([*kernel, x.shape[1].value, fmaps], activation, param=param, lrmul=lrmul)
-    w = tf.cast(w, x.dtype)
-    return tf.nn.conv3d(x, w, strides=[1, 1, 1, 1, 1], padding='SAME', data_format='NCDHW'), runtime_coef
+    w = get_weight([*kernel, x.shape[1].value, fmaps], activation, param=param, lrmul=lrmul)
+    return tf.nn.conv3d(x, w, strides=[1, 1, 1, 1, 1], padding='SAME', data_format='NCDHW')
 
 
 def leaky_relu(x, alpha_lr=0.2):
@@ -116,14 +151,14 @@ def horovod_batch_normalization(x, is_training=True, decay=.9, data_format='chan
     gamma = tf.get_variable('gamma', shape=shape, initializer=tf.initializers.ones())
     beta = tf.get_variable('beta', shape=shape, initializer=tf.initializers.zeros())
 
-    global_mean = hvd.allreduce(mean)
-    global_var = hvd.allreduce(var)
+    # global_mean = hvd.allreduce(mean)
+    # global_var = hvd.allreduce(var)
 
     ema_mean = tf.get_variable('ema_mean', shape=mean.shape, initializer=tf.initializers.zeros(), trainable=False)
     ema_var = tf.get_variable('ema_var', shape=var.shape, initializer=tf.initializers.ones(), trainable=False)
 
-    ema_mean = decay * ema_mean + (1 - decay) * global_mean
-    ema_var = decay * ema_var + (1 - decay) * global_var
+    # ema_mean = decay * ema_mean + (1 - decay) * global_mean
+    # ema_var = decay * ema_var + (1 - decay) * global_var
 
     if not is_training:
         global_mean = ema_mean
@@ -132,48 +167,3 @@ def horovod_batch_normalization(x, is_training=True, decay=.9, data_format='chan
     return tf.nn.batch_normalization(x, global_mean, global_var, offset=beta, scale=gamma, variance_epsilon=1e-8)
 
 
-if __name__ == '__main__':
-
-
-    hvd.init()
-    x = tf.random.normal((1, 3, 32, 32))
-
-    y = horovod_batch_normalization(x)
-
-    with tf.Session() as sess:
-
-        for _ in range(100):
-            sess.run(tf.global_variables_initializer())
-            sess.run(y)
-
-    tf.reset_default_graph()
-    x = tf.random.normal((1, 32))
-    y = horovod_batch_normalization(x)
-
-    with tf.Session() as sess:
-
-        for _ in range(100):
-            sess.run(tf.global_variables_initializer())
-            sess.run(y)
-    tf.reset_default_graph()
-
-    x = tf.random.normal((1, 32, 32, 3))
-    y = horovod_batch_normalization(x, data_format='channels_last')
-
-    with tf.Session() as sess:
-
-        for _ in range(100):
-            sess.run(tf.global_variables_initializer())
-            sess.run(y)
-    tf.reset_default_graph()
-    tf.reset_default_graph()
-
-    x = tf.random.normal((1, 32))
-    y = horovod_batch_normalization(x, data_format='channels_last')
-
-    with tf.Session() as sess:
-
-        for _ in range(100):
-            sess.run(tf.global_variables_initializer())
-            sess.run(y)
-    tf.reset_default_graph()
