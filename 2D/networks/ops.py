@@ -39,7 +39,7 @@ def get_weight(shape, activation, lrmul=1, use_eq_lr=False, param=None):
     he_std = gain / np.sqrt(fan_in)
     runtime_coef = he_std * lrmul
     init_std = 1 / runtime_coef if use_eq_lr else 1 / lrmul
-    w = tf.get_variable('weight', shape=shape,
+    w = tf.get_variable("weight", shape=shape,
                             initializer=tf.initializers.random_normal(0, init_std))
 
     if use_eq_lr:
@@ -65,8 +65,6 @@ def dense(x, fmaps, activation, lrmul=1, param=None):
 
 
 def conv2d(x, fmaps, kernel, activation, param=None, lrmul=1):
-    print()
-    print("Shape = " + str(x.shape))
     print("Kernel = " + str(kernel))
 
     w = get_weight([*kernel, x.shape[1].value, fmaps], activation, param=param, lrmul=lrmul)
@@ -75,8 +73,6 @@ def conv2d(x, fmaps, kernel, activation, param=None, lrmul=1):
 
 
 def conv2d_transpose(x, fmaps, kernel, activation, param=None, lrmul=1):
-    print()
-    print("Shape = " + str(x.shape))
     print("Kernel = " + str(kernel))
 
     output_shape = tf.stack([x.shape[0].value, fmaps, int(x.shape[2].value*2), int(x.shape[2].value*2)])
@@ -85,17 +81,6 @@ def conv2d_transpose(x, fmaps, kernel, activation, param=None, lrmul=1):
     print("Weight = " + str(w.shape))
     return tf.nn.conv2d_transpose(x, w, output_shape, strides=[2, 2], padding='SAME', data_format='NCHW')
 
-
-     # tf.nn.conv2d_transpose(
-     #     input,
-     #     filters,
-     #     output_shape,
-     #     strides,
-     #     padding='SAME',
-     #     data_format='NHWC',
-     #     dilations=None,
-     #     name=None
-     #)
 
 def maxpool2d(x, pool_size, strides, padding, data_format):
     return tf.nn.max_pool2d(x, pool_size, strides, padding, data_format)
