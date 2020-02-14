@@ -224,6 +224,7 @@ if __name__=="__main__":
             epoch_loss = 0
             for _ in range(int(mnist.train.num_examples / BATCH_SIZE)):
                 epoch_x, epoch_y = mnist.train.next_batch(BATCH_SIZE)
+
                 epoch_x = np.reshape(epoch_x, [100, 1, 28, 28])
                 epoch_y = np.reshape(epoch_x, [100, 1, 28, 28])
 

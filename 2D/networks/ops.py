@@ -76,8 +76,8 @@ def conv2d_transpose(x, fmaps, kernel, activation, param=None, lrmul=1):
     print("Kernel = " + str(kernel))
 
     output_shape = tf.stack([x.shape[0].value, fmaps, int(x.shape[2].value*2), int(x.shape[2].value*2)])
-
     w = get_weight([*kernel, x.shape[1].value, fmaps], activation, param=param, lrmul=lrmul)
+    w = tf.transpose(w, perm=[0, 1, 3, 2])
     print("Weight = " + str(w.shape))
     return tf.nn.conv2d_transpose(x, w, output_shape, strides=[2, 2], padding='SAME', data_format='NCHW')
 
