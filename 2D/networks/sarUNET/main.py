@@ -186,6 +186,7 @@ def forward(x):
     print("\n-----EXPANSION-----")
 
     decode_block3 = crop_and_concat(bottle, x3, crop=True)
+    print(decode_block3.shape)
 
     with tf.variable_scope("expanse3"):
         x4 = expansion_block(decode_block3, decode_block3.shape[1].value // 2, decode_block3.shape[1].value // 4, "conv1", "conv2", "conv_trans3", False,
@@ -230,43 +231,7 @@ if __name__=="__main__":
                 epoch_x = np.pad(epoch_x, ((0,0), (0,0), (2,2), (2,2,)))
                 epoch_y = np.pad(epoch_y, ((0,0), (0,0), (2,2), (2,2,)))
 
-                # epoch_x = np.reshape(epoch_x, (-1, 32, 32, 1))
 
-                # X_batch = epoch_x
-                # batch_tensor = tf.reshape(X_batch, [-1, 28, 28, 1])
-                # resized_images = tf.image.resize_images(batch_tensor, [32, 32])
-                # resized_images = tf.transpose(resized_images, perm=[0,3,2,1])
-                #
-                # batch_X = resized_images.eval(session=sess)
-                #
-                # for i in range(10):
-                #     cv2.namedWindow('Resized image #%d' % i, cv2.WINDOW_NORMAL)
-                #     cv2.imshow('Resized image #%d' % i, batch_X[i])
-                #     cv2.waitKey(0)
-                #
-                # Y_batch = epoch_y
-                # batch_tensor = tf.reshape(Y_batch, [-1, 28, 28, 1])
-                # resized_images = tf.image.resize_images(batch_tensor, [32, 32])
-                # resized_images = tf.transpose(resized_images, perm=[0, 3, 2, 1])
-                #
-                # batch_Y = resized_images.eval(session=sess)
-
-                # train_data_x = []
-                # for img in epoch_x:
-                #     resized_img = cv2.resize(img, (32, 32))
-                #     train_data_x.append(resized_img)
-                #     # train_data_x.insert(1, 1)
-                #
-                # train_data_y = []
-                # for img in epoch_y:
-                #     resized_img = cv2.resize(img, (32, 32))
-                #     train_data_y.append(resized_img)
-                #     # train_data_y.insert(1, 1)
-                #
-                # for item in train_data_x[199:]:
-                #     print(item)
-                # print(train_data_x)
-                # print(len(train_data_x))
                 _, c = sess.run([optimizer, loss], feed_dict={x: epoch_x, y: epoch_y})
                 epoch_loss += c
 
