@@ -28,6 +28,16 @@ def calculate_gain(activation, param=None):
         else:
             raise ValueError("negative_slope {} not a valid number".format(param))
         return np.sqrt(2.0 / (1 + negative_slope ** 2))
+
+    elif activation == 'leaky_relu_native':
+        assert param is not None
+        if not isinstance(param, bool) and isinstance(param, int) or isinstance(param, float):
+            # True/False are instances of int, hence check above
+            negative_slope = param
+        else:
+            raise ValueError("negative_slope {} not a valid number".format(param))
+        return np.sqrt(2.0 / (1 + negative_slope ** 2))
+
     else:
         raise ValueError("Unsupported nonlinearity {}".format(activation))
 
@@ -35,12 +45,13 @@ def calculate_gain(activation, param=None):
 def get_weight(shape, activation, lrmul=1, use_eq_lr=False, param=None):
     """Get a weight variable."""
     fan_in = np.prod(shape[:-1])
+    print(fan_in.shape)
     gain = calculate_gain(activation, param)
     he_std = gain / np.sqrt(fan_in)
     runtime_coef = he_std * lrmul
     init_std = 1 / runtime_coef if use_eq_lr else 1 / lrmul
     w = tf.get_variable("weight", shape=shape,
-                            initializer=tf.initializers.random_normal(0, init_std))
+                            initializer=tf.initializers.glorot_uniform())
 
     if use_eq_lr:
         w *= runtime_coef
@@ -49,7 +60,7 @@ def get_weight(shape, activation, lrmul=1, use_eq_lr=False, param=None):
 
 
 def apply_bias(x, lrmul=1):
-    b = tf.get_variable('bias', shape=[x.shape[1]], initializer=tf.initializers.random_normal()) * lrmul
+    b = tf.get_variable('bias', shape=[x.shape[3]], initializer=tf.initializers.random_normal()) * lrmul
     b = tf.cast(b, x.dtype)
     if len(x.shape) == 2:
         return x + b
@@ -66,10 +77,13 @@ def dense(x, fmaps, activation, lrmul=1, param=None):
 
 def conv2d(x, fmaps, kernel, activation, param=None, lrmul=1):
     print("Kernel = " + str(kernel))
-
     w = get_weight([*kernel, x.shape[3].value, fmaps], activation, param=param, lrmul=lrmul)
     print("Weight = " + str(w.shape))
     print(x.shape)
+    # w = tf.nn.l2_loss(w)
+    # print("Weight2 = " + str(w.shape))
+    w = tf.Print(w, [tf.norm(w)], "Weights: ")
+    # x = tf.Print(x, [tf.norm(x)], "x.shape: ")
     return tf.nn.conv2d(x, w, strides=[1, 1, 1, 1], padding='SAME', data_format='NHWC')
 
 
@@ -98,20 +112,21 @@ def conv3d(x, fmaps, kernel, activation, param=None, lrmul=1):
 
 def leaky_relu(x, alpha_lr=0.2):
     with tf.variable_scope('leaky_relu'):
-        alpha_lr = tf.constant(alpha_lr, dtype=x.dtype, name='alpha_lr')
-
-        @tf.custom_gradient
-        def func(x):
-            y = tf.maximum(x, x * alpha_lr)
-
-            @tf.custom_gradient
-            def grad(dy):
-                dx = tf.where(y >= 0, dy, dy * alpha_lr)
-                return dx, lambda ddx: tf.where(y >= 0, ddx, ddx * alpha_lr)
-
-            return y, grad
-
-        return func(x)
+        # alpha_lr = tf.constant(alpha_lr, dtype=x.dtype, name='alpha_lr')
+        #
+        # @tf.custom_gradient
+        # def func(x):
+        #     y = tf.maximum(x, x * alpha_lr)
+        #
+        #     @tf.custom_gradient
+        #     def grad(dy):
+        #         dx = tf.where(y >= 0, dy, dy * alpha_lr)
+        #         return dx, lambda ddx: tf.where(y >= 0, ddx, ddx * alpha_lr)
+        #
+        #     return y, grad
+        #
+        # return func(x)
+        return tf.nn.leaky_relu(x, alpha=alpha_lr)
 
 
 def act(x, activation, param=None):
@@ -120,6 +135,8 @@ def act(x, activation, param=None):
         return leaky_relu(x, alpha_lr=param)
     elif activation == 'linear':
         return x
+    elif activation == 'leaky_relu_native':
+        return tf.nn.leaky_relu(x)
     else:
         raise ValueError(f"Unknown activation {activation}")
 

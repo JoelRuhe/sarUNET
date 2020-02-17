@@ -35,6 +35,7 @@ def calculate_gain(activation, param=None):
 def get_weight(shape, activation, lrmul=1, use_eq_lr=False, param=None):
     """Get a weight variable."""
     fan_in = np.prod(shape[:-1])
+    print("Fan-in = " + str(fan_in.shape))
     gain = calculate_gain(activation, param)
     he_std = gain / np.sqrt(fan_in)
     runtime_coef = he_std * lrmul
