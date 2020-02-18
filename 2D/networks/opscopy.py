@@ -48,10 +48,19 @@ def get_weight(shape, activation, lrmul=1, use_eq_lr=False, param=None):
     print(fan_in.shape)
     gain = calculate_gain(activation, param)
     he_std = gain / np.sqrt(fan_in)
+    print(he_std, 'he_std')
     runtime_coef = he_std * lrmul
-    init_std = 1 / runtime_coef if use_eq_lr else 1 / lrmul
+    # init_std = 1 / runtime_coef
+    if use_eq_lr:
+        init_std = 1.0 / lrmul
+        runtime_coef = he_std * lrmul
+    else:
+        init_std = he_std / lrmul
+        runtime_coef = lrmul
+
+    print(init_std, 'std')
     w = tf.get_variable("weight", shape=shape,
-                            initializer=tf.initializers.glorot_uniform())
+                            initializer=tf.initializers.random_normal(0, init_std)) * runtime_coef
 
     if use_eq_lr:
         w *= runtime_coef
@@ -82,7 +91,7 @@ def conv2d(x, fmaps, kernel, activation, param=None, lrmul=1):
     print(x.shape)
     # w = tf.nn.l2_loss(w)
     # print("Weight2 = " + str(w.shape))
-    w = tf.Print(w, [tf.norm(w)], "Weights: ")
+    # w = tf.Print(w, [tf.norm(w)], "Weights: ")
     # x = tf.Print(x, [tf.norm(x)], "x.shape: ")
     return tf.nn.conv2d(x, w, strides=[1, 1, 1, 1], padding='SAME', data_format='NHWC')
 

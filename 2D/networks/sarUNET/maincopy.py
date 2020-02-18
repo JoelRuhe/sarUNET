@@ -1,15 +1,29 @@
 from networks.opscopy import *
 from tensorflow.examples.tutorials.mnist import input_data
-import cv2
+import os
+import time
 
 mnist = input_data.read_data_sets("/tmp/data/", one_hot=True)
-BATCH_SIZE = 10
+BATCH_SIZE = 100
 n_classes = 10
 activation = 'leaky_relu'
 
 x = tf.placeholder(tf.float32, shape=[BATCH_SIZE, 32, 32, 1])
 y = tf.placeholder(tf.float32, shape=[BATCH_SIZE, 32, 32, 1])
 
+
+
+gopts = tf.GraphOptions(place_pruned_graph=True)
+config = tf.ConfigProto(graph_options=gopts, allow_soft_placement=True)
+
+timestamp = time.strftime("%Y-%m-%d_%H:%M:%S", time.gmtime())
+logdir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'runs', timestamp)
+writer = tf.summary.FileWriter(logdir=logdir)
+
+print("Arguments passed:")
+print(f"Saving files to {logdir}")
+
+var_list = list()
 
 
 def contracting_block(x, out_channels, scope1, scope2, activation, param=None, is_training=True):
@@ -213,28 +227,33 @@ def forward(x):
     with tf.variable_scope("final"):
         x6 = final_layer(decode_block1, decode_block1.shape[3].value // 2, 1, activation=activation, param=0.2)
 
+    tf.summary.scalar('loss', x6)
+
     return x6
 
 
 if __name__=="__main__":
+
     prediction = forward(x)
 
     # prediction = tf.Print(prediction, [tf.norm(prediction)], "Prediction: ")
     # loss = tf.contrib.losses.sigmoid
     loss = tf.losses.mean_squared_error(labels=y, predictions=prediction)
-    optimizer = tf.train.GradientDescentOptimizer(0.0001, True).minimize(loss)
+    optimizer = tf.train.AdamOptimizer(0.001).minimize(loss)
+
+    summary_graph = tf.summary.scalar('loss', loss)
 
     # capped_gvs = [(tf.clip_by_value(grad, -1.0, 1.0), var) if grad != None else (grad, var) for grad, var in optimizer]
     # train_step = optimizer.apply_gradients(capped_gvs)
     output_shape = 32
 
-    hm_epochs = 10
+    hm_epochs = 1
     with tf.Session() as sess:
         sess.run(tf.initialize_all_variables())
 
         for epoch in range(hm_epochs):
             epoch_loss = 0
-            for i in range(int(mnist.train.num_examples / 1000)):
+            for i in range(int(mnist.train.num_examples // 10000)):
                 print(int(mnist.train.num_examples / 1000))
                 print(i)
                 epoch_x, epoch_y = mnist.train.next_batch(BATCH_SIZE)
@@ -245,13 +264,12 @@ if __name__=="__main__":
                 epoch_x = np.pad(epoch_x, ((0,0), (2,2), (2,2), (0,0)))
                 epoch_y = np.pad(epoch_y, ((0,0), (2,2), (2,2), (0,0)))
 
-                # epoch_x = epoch_x/255
-                # epoch_y = epoch_y/255
+                _, summary_session, c = sess.run([optimizer, summary_graph,  loss], feed_dict={x: epoch_x, y: epoch_y})
+                writer.add_summary(summary_session, epoch)
+                # writer.flush()
+                var_list = c
+                print(c, 'loss')
 
-                _, c = sess.run([optimizer, loss], feed_dict={x: epoch_x, y: epoch_y})
-                # epoch_x = tf.nn.l2_loss(epoch_x)
-                epoch_loss += c
-                print(c)
             print('Epoch', epoch, 'completed out of', hm_epochs, 'loss:', epoch_loss)
             correct = tf.equal(tf.argmax(prediction, 1), tf.argmax(y, 1))
             accuracy = tf.reduce_mean(tf.cast(correct, 'float'))
@@ -261,5 +279,7 @@ if __name__=="__main__":
 
         accuracy = tf.reduce_mean(tf.cast(correct, 'float'))
         print('Accuracy:', accuracy.eval({x: mnist.test.images, y: mnist.test.labels}))
+
+
 
 
