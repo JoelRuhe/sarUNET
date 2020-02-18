@@ -242,6 +242,11 @@ if __name__=="__main__":
     optimizer = tf.train.AdamOptimizer(0.001).minimize(loss)
 
     summary_graph = tf.summary.scalar('loss', loss)
+    summary_imageRemake = tf.summary.image('imageRemake', x)
+    summary_imageReal = tf.summary.image('imageReal', y)
+
+    # tf.summary.merge_all()
+
 
     # capped_gvs = [(tf.clip_by_value(grad, -1.0, 1.0), var) if grad != None else (grad, var) for grad, var in optimizer]
     # train_step = optimizer.apply_gradients(capped_gvs)
@@ -264,8 +269,11 @@ if __name__=="__main__":
                 epoch_x = np.pad(epoch_x, ((0,0), (2,2), (2,2), (0,0)))
                 epoch_y = np.pad(epoch_y, ((0,0), (2,2), (2,2), (0,0)))
 
-                _, summary_session, c = sess.run([optimizer, summary_graph,  loss], feed_dict={x: epoch_x, y: epoch_y})
+                _, summary_session, summary_imageReal1, summary_imageRemake1, c = sess.run([optimizer, summary_graph, summary_imageReal, summary_imageRemake, loss], feed_dict={x: epoch_x, y: epoch_y})
                 writer.add_summary(summary_session, epoch)
+                writer.add_summary(summary_imageReal1, epoch)
+                writer.add_summary(summary_imageRemake1, epoch)
+
                 # writer.flush()
                 var_list = c
                 print(c, 'loss')
