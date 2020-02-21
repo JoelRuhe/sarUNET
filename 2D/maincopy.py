@@ -22,39 +22,6 @@ num_labels = 250
 testset_length = 50
 trainset_length = 1000
 
-is_train = tf.placeholder(tf.bool, name="condition")
-
-dataset_train, imagenet_data_train = imagenet_dataset(dataset_path, scratch_path, size, train, copy_files=True, num_labels=num_labels)
-dataset_train = dataset_train.batch(batch_size, drop_remainder=True)
-dataset_train = dataset_train.repeat()
-dataset_train = dataset_train.prefetch(AUTOTUNE)
-dataset_train = dataset_train.make_one_shot_iterator()
-
-dataset_test, imagenet_data_test = imagenet_dataset(dataset_path, scratch_path, size, train, copy_files=True, num_labels=num_labels)
-dataset_test = dataset_test.batch(batch_size, drop_remainder=True)
-dataset_test = dataset_test.repeat()
-dataset_test = dataset_test.prefetch(AUTOTUNE)
-dataset_test = dataset_test.make_one_shot_iterator()
-
-batch = tf.cond(is_train, lambda: dataset_train.get_next(), lambda: dataset_test.get_next())
-
-if len(batch) == 1:
-    image_input = batch
-    label = None
-elif len(batch) == 2:
-    image_input, label = batch
-else:
-    raise NotImplementedError()
-
-image_input = tf.ensure_shape(image_input, [batch_size, image_channels, size, size])
-
-x_input = image_input + tf.random.normal(shape=image_input.shape) * 0.15
-y = image_input
-
-gopts = tf.GraphOptions(place_pruned_graph=True)
-config = tf.ConfigProto(graph_options=gopts, allow_soft_placement=True)
-config.gpu_options.allow_growth = True
-
 
 def contracting_block(x, out_channels, activation, param=None, is_training=True):
     """TODO: Implement with BatchNorm2d"""
@@ -178,20 +145,19 @@ def crop_and_concat(upsampled, bypass, crop=False):
 
     return tf.concat([upsampled, bypass], 1)
 
-
 def forward(x, image_size):
     counter = 0
     tensor_list = list()
 
     while image_size > 4:
-        image_size = image_size//2
+        image_size = image_size // 2
         counter = counter + 1
 
     print("\n-----CONTRACTION-----")
 
     for i in range(counter):
-        print("contract"+str(i))
-        with tf.variable_scope("contract"+str(i)):
+        print("contract" + str(i))
+        with tf.variable_scope("contract" + str(i)):
             x = contracting_block(x, output_channels, activation=activation, param=gain_param)
             tensor_list.append(x)
             print("maxpool")
@@ -206,9 +172,10 @@ def forward(x, image_size):
 
     for i in reversed(range(len(tensor_list) - 1)):
         x = crop_and_concat(x, tensor_list[i + 1], crop=True)
-        print("expanse"+str(i))
+        print("expanse" + str(i))
         with tf.variable_scope("expanse" + str(i)):
-            x = expansion_block(x, x.shape[1].value // 2, x.shape[1].value // 4, activation=activation, param=gain_param)
+            x = expansion_block(x, x.shape[1].value // 2, x.shape[1].value // 4, activation=activation,
+                                param=gain_param)
 
     x = crop_and_concat(x, tensor_list[0], crop=True)
     print("\n-----FINAL-----")
@@ -219,18 +186,40 @@ def forward(x, image_size):
     return x
 
 
-if __name__ == "__main__":
+def main(args):
 
-    parser = argparse.ArgumentParser()
-    parser.add_argument('image_size', type=str, help="'height or width, eg. 128'")
-    parser.add_argument('batch_size', type=int, default=256)
-    parser.add_argument('--dataset_path', type=str, default='/nfs/managed_datasets/imagenet-full/')
-    parser.add_argument('--scratch_path', type=str, default='/scratch/joelr/')
-    parser.add_argument('--loss_fn', default='mean_squared_error', choices=['mean_squared_error'])
-    parser.add_argument('--activation', type=str, default='leaky_relu')
-    parser.add_argument('--leakiness', type=float, default=0.2)
-    parser.add_argument('--num_labels', default=None, type=int)
-    args = parser.parse_args()
+    is_train = tf.placeholder(tf.bool, name="condition")
+
+    dataset_train, imagenet_data_train = imagenet_dataset(dataset_path, scratch_path, size, args.train , copy_files=True, num_labels=num_labels)
+    dataset_train = dataset_train.batch(batch_size, drop_remainder=True)
+    dataset_train = dataset_train.repeat()
+    dataset_train = dataset_train.prefetch(AUTOTUNE)
+    dataset_train = dataset_train.make_one_shot_iterator()
+
+    dataset_test, imagenet_data_test = imagenet_dataset(dataset_path, scratch_path, size, args.train, copy_files=True, num_labels=num_labels)
+    dataset_test = dataset_test.batch(batch_size, drop_remainder=True)
+    dataset_test = dataset_test.repeat()
+    dataset_test = dataset_test.prefetch(AUTOTUNE)
+    dataset_test = dataset_test.make_one_shot_iterator()
+
+    batch = tf.cond(is_train, lambda: dataset_train.get_next(), lambda: dataset_test.get_next())
+
+    if len(batch) == 1:
+        image_input = batch
+        label = None
+    elif len(batch) == 2:
+        image_input, label = batch
+    else:
+        raise NotImplementedError()
+
+    image_input = tf.ensure_shape(image_input, [batch_size, image_channels, size, size])
+
+    x_input = image_input + tf.random.normal(shape=image_input.shape) * 0.15
+    y = image_input
+
+    gopts = tf.GraphOptions(place_pruned_graph=True)
+    config = tf.ConfigProto(graph_options=gopts, allow_soft_placement=True)
+    config.gpu_options.allow_growth = True
 
     prediction = forward(x_input, size)
     loss = tf.losses.mean_squared_error(labels=y, predictions=prediction)
@@ -282,12 +271,35 @@ if __name__ == "__main__":
                 epoch_loss_test = epoch_loss_test + c
 
             writer.add_summary(tf.Summary(value=[
-                tf.Summary.Value(tag='loss_test', simple_value=epoch_loss_test/testset_length)]), global_step)
+                tf.Summary.Value(tag='loss_test', simple_value=epoch_loss_test / testset_length)]), global_step)
 
             test_image_summary = sess.run(image_summary_test, feed_dict={is_train: train})
             writer.add_summary(test_image_summary, global_step)
 
             writer.flush()
 
-            print('Epoch', epoch, 'completed out of', hm_epochs, 'loss_train:', epoch_loss_train/trainset_length, 'loss_test:',
-                  epoch_loss_test/testset_length)
+            print('Epoch', epoch, 'completed out of', hm_epochs, 'loss_train:', epoch_loss_train / trainset_length,
+                  'loss_test:',
+                  epoch_loss_test / testset_length)
+
+
+
+
+if __name__ == "__main__":
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument('image_size', type=str, help="'height or width, eg. 128'")
+    parser.add_argument('batch_size', type=int, default=256)
+    parser.add_argument('train', default=True, type=bool)
+    parser.add_argument('--dataset_path', type=str, default='/nfs/managed_datasets/imagenet-full/')
+    parser.add_argument('--scratch_path', type=str, default='/scratch/joelr/')
+    parser.add_argument('--loss_fn', default='mean_squared_error', choices=['mean_squared_error'])
+    parser.add_argument('--activation', type=str, default='leaky_relu')
+    parser.add_argument('--leakiness', type=float, default=0.2)
+    parser.add_argument('--num_labels', default=None, type=int)
+    args = parser.parse_args()
+
+    if args.numb_labels is None:
+        print("Test")
+    main(args)
+

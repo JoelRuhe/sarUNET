@@ -45,12 +45,8 @@ def calculate_gain(activation, param=None):
 def get_weight(shape, activation, lrmul=1, use_eq_lr=False, param=None):
     """Get a weight variable."""
     fan_in = np.prod(shape[:-1])
-    print(fan_in.shape)
     gain = calculate_gain(activation, param)
     he_std = gain / np.sqrt(fan_in)
-    print(he_std, 'he_std')
-    runtime_coef = he_std * lrmul
-    # init_std = 1 / runtime_coef
     if use_eq_lr:
         init_std = 1.0 / lrmul
         runtime_coef = he_std * lrmul
@@ -58,7 +54,6 @@ def get_weight(shape, activation, lrmul=1, use_eq_lr=False, param=None):
         init_std = he_std / lrmul
         runtime_coef = lrmul
 
-    print(init_std, 'std')
     w = tf.get_variable("weight", shape=shape,
                             initializer=tf.initializers.random_normal(0, init_std)) * runtime_coef
 
@@ -86,28 +81,23 @@ def dense(x, fmaps, activation, lrmul=1, param=None):
 
 def conv2d(x, fmaps, kernel, activation, param=None, lrmul=1):
     print("Kernel = " + str(kernel))
-    w = get_weight([*kernel, x.shape[3].value, fmaps], activation, param=param, lrmul=lrmul)
+    w = get_weight([*kernel, x.shape[1].value, fmaps], activation, param=param, lrmul=lrmul)
     print("Weight = " + str(w.shape))
     print(x.shape)
-    # w = tf.nn.l2_loss(w)
-    # print("Weight2 = " + str(w.shape))
-    # w = tf.Print(w, [tf.norm(w)], "Weights: ")
-    # x = tf.Print(x, [tf.norm(x)], "x.shape: ")
-    return tf.nn.conv2d(x, w, strides=[1, 1, 1, 1], padding='SAME', data_format='NHWC')
+    return tf.nn.conv2d(x, w, strides=[1, 1, 1, 1], padding='SAME', data_format='NCHW')
 
 
 def conv2d_transpose(x, fmaps, kernel, activation, param=None, lrmul=1):
     print("Kernel = " + str(kernel))
     print(fmaps)
     print("x.shape = " + str(x.shape))
-    output_shape = tf.stack([x.shape[0].value, int(x.shape[2].value*2), int(x.shape[2].value*2), fmaps])
+    output_shape = tf.stack([x.shape[0].value, fmaps, int(x.shape[2].value*2), int(x.shape[2].value*2)])
     print("output_shape = " + str(output_shape.shape))
-    w = get_weight([*kernel, x.shape[3].value, fmaps], activation, param=param, lrmul=lrmul)
+    w = get_weight([*kernel, x.shape[1].value, fmaps], activation, param=param, lrmul=lrmul)
     print("Weight1 = " + str(w.shape))
     w = tf.transpose(w, perm=[0, 1, 3, 2])
-
     print("Weight2 = " + str(w.shape))
-    return tf.nn.conv2d_transpose(x, w, output_shape, strides=[2, 2], padding='SAME', data_format='NHWC')
+    return tf.nn.conv2d_transpose(x, w, output_shape, strides=[2, 2], padding='SAME', data_format='NCHW')
 
 
 def maxpool2d(x, pool_size, strides, padding, data_format):
@@ -121,20 +111,6 @@ def conv3d(x, fmaps, kernel, activation, param=None, lrmul=1):
 
 def leaky_relu(x, alpha_lr=0.2):
     with tf.variable_scope('leaky_relu'):
-        # alpha_lr = tf.constant(alpha_lr, dtype=x.dtype, name='alpha_lr')
-        #
-        # @tf.custom_gradient
-        # def func(x):
-        #     y = tf.maximum(x, x * alpha_lr)
-        #
-        #     @tf.custom_gradient
-        #     def grad(dy):
-        #         dx = tf.where(y >= 0, dy, dy * alpha_lr)
-        #         return dx, lambda ddx: tf.where(y >= 0, ddx, ddx * alpha_lr)
-        #
-        #     return y, grad
-        #
-        # return func(x)
         return tf.nn.leaky_relu(x, alpha=alpha_lr)
 
 
