@@ -1,6 +1,6 @@
 import tensorflow as tf
 import numpy as np
-# import horovod.tensorflow as hvd
+import horovod.tensorflow as hvd
 
 
 def k(x):
@@ -132,7 +132,20 @@ def maxpool3d(x, pool_size, strides, padding, data_format):
 
 def leaky_relu(x, alpha_lr=0.2):
     with tf.variable_scope('leaky_relu'):
-        return tf.nn.leaky_relu(x, alpha=alpha_lr)
+        alpha_lr = tf.constant(alpha_lr, dtype=x.dtype, name='alpha_lr')
+
+        @tf.custom_gradient
+        def func(x):
+            y = tf.maximum(x, x * alpha_lr)
+
+            @tf.custom_gradient
+            def grad(dy):
+                dx = tf.where(y >= 0, dy, dy * alpha_lr)
+                return dx, lambda ddx: tf.where(y >= 0, ddx, ddx * alpha_lr)
+
+            return y, grad
+
+        return func(x)
 
 
 def act(x, activation, param=None):
@@ -142,12 +155,20 @@ def act(x, activation, param=None):
     elif activation == 'linear':
         return x
     elif activation == 'leaky_relu_native':
-        return tf.nn.leaky_relu(x)
+        assert param is not None
+        return tf.nn.leaky_relu(x, alpha=param)
     else:
         raise ValueError(f"Unknown activation {activation}")
 
 
 def horovod_batch_normalization(x, is_training=True, decay=.9, data_format='channels_first'):
+
+    # Check whether Horovod is initialized.
+    try:
+        hvd.size()
+        use_hvd = True
+    except ValueError:
+        use_hvd = False
 
     shape = [1 for _ in range(len(x.shape))]
     if data_format == 'channels_first':
@@ -164,19 +185,21 @@ def horovod_batch_normalization(x, is_training=True, decay=.9, data_format='chan
     gamma = tf.get_variable('gamma', shape=shape, initializer=tf.initializers.ones())
     beta = tf.get_variable('beta', shape=shape, initializer=tf.initializers.zeros())
 
-    # global_mean = hvd.allreduce(mean)
-    # global_var = hvd.allreduce(var)
+    if use_hvd:
+        global_mean = hvd.allreduce(mean)
+        global_var = hvd.allreduce(var)
+    else:
+        global_mean = mean
+        global_var = var
 
     ema_mean = tf.get_variable('ema_mean', shape=mean.shape, initializer=tf.initializers.zeros(), trainable=False)
     ema_var = tf.get_variable('ema_var', shape=var.shape, initializer=tf.initializers.ones(), trainable=False)
 
-    # ema_mean = decay * ema_mean + (1 - decay) * global_mean
-    # ema_var = decay * ema_var + (1 - decay) * global_var
+    ema_mean = decay * ema_mean + (1 - decay) * global_mean
+    ema_var = decay * ema_var + (1 - decay) * global_var
 
     if not is_training:
         global_mean = ema_mean
         global_var = ema_var
 
     return tf.nn.batch_normalization(x, global_mean, global_var, offset=beta, scale=gamma, variance_epsilon=1e-8)
-
-

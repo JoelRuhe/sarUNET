@@ -50,54 +50,53 @@ class ImageNetDataset:
         self.scratch_files_train = []
         self.scratch_files_test = []
 
-        print("Copying train files to scratch...")
-        for f in tqdm(sorted(train_examples)):
+        if train:
+            print("Copying train files to scratch...")
+            for f in tqdm(sorted(train_examples)):
+                if copy_files:
+                    directory = os.path.normpath(scratch_dir + f.rsplit('/', maxsplit=1)[0])
+                    if not os.path.exists(directory):
+                        os.makedirs(directory)
+                    shutil.copy(f, os.path.normpath(scratch_dir + f))
+                self.scratch_files_train.append(os.path.normpath(scratch_dir + f))
             if copy_files:
-                directory = os.path.normpath(scratch_dir + f.rsplit('/', maxsplit=1)[0])
-                if not os.path.exists(directory):
-                    os.makedirs(directory)
-                shutil.copy(f, os.path.normpath(scratch_dir + f))
-            self.scratch_files_train.append(os.path.normpath(scratch_dir + f))
-        if copy_files:
-            print("All Files Copied")
+                print("All Files Copied")
 
-        print("Copying test files to scratch...")
-        for f in tqdm(sorted(test_examples)):
-            if copy_files:
-                directory = os.path.normpath(scratch_dir + f.rsplit('/', maxsplit=1)[0])
-                if not os.path.exists(directory):
-                    os.makedirs(directory)
-                shutil.copy(f, os.path.normpath(scratch_dir + f))
-            self.scratch_files_test.append(os.path.normpath(scratch_dir + f))
+            while not all(os.path.exists(f) for f in self.scratch_files_train):
+                print(f"Waiting... {sum(os.path.exists(f) for f in self.scratch_files_train)} / {len(self.scratch_files_train)}")
+                time.sleep(1)
 
-        while not all(os.path.exists(f) for f in self.scratch_files_train):
-            print(f"Waiting... {sum(os.path.exists(f) for f in self.scratch_files_train)} / {len(self.scratch_files_train)}")
-            time.sleep(1)
+            assert all(os.path.isfile(f) for f in self.scratch_files_train)
+            print(f"Length of train dataset: {len(self.scratch_files_train)}")
+            print(f"Length of train labels: {len(self.train_labels)}")
+            assert len(self.scratch_files_train) == len(self.train_labels)
+            test_image = io.imread(train_examples[0])
 
-        while not all(os.path.exists(f) for f in self.scratch_files_test):
-            print(f"Waiting... {sum(os.path.exists(f) for f in self.scratch_files_test)} / {len(self.scratch_files_test)}")
-            time.sleep(1)
+        if not train:
+            print("Copying test files to scratch...")
+            for f in tqdm(sorted(test_examples)):
+                if copy_files:
+                    directory = os.path.normpath(scratch_dir + f.rsplit('/', maxsplit=1)[0])
+                    if not os.path.exists(directory):
+                        os.makedirs(directory)
+                    shutil.copy(f, os.path.normpath(scratch_dir + f))
+                self.scratch_files_test.append(os.path.normpath(scratch_dir + f))
 
-        assert all(os.path.isfile(f) for f in self.scratch_files_train)
-        assert all(os.path.isfile(f) for f in self.scratch_files_test)
+            while not all(os.path.exists(f) for f in self.scratch_files_test):
+                print(f"Waiting... {sum(os.path.exists(f) for f in self.scratch_files_test)} / {len(self.scratch_files_test)}")
+                time.sleep(1)
 
-        print(f"Length of train dataset: {len(self.scratch_files_train)}")
-        print(f"Length of train labels: {len(self.train_labels)}")
-        print(f"Length of test dataset: {len(self.scratch_files_test)}")
-        print(f"Length of test labels: {len(self.test_labels)}")
+            assert all(os.path.isfile(f) for f in self.scratch_files_test)
 
-        assert len(self.scratch_files_train) == len(self.train_labels)
-        assert len(self.scratch_files_test) == len(self.test_labels)
+            print(f"Length of test dataset: {len(self.scratch_files_test)}")
+            print(f"Length of test labels: {len(self.test_labels)}")
+            assert len(self.scratch_files_test) == len(self.test_labels)
+            test_image = io.imread(test_examples[0])
 
-        test_image = io.imread(train_examples[0])
         self.shape = test_image.shape
         self.dtype = test_image.dtype
 
-        print(self.shape)
-        print(self.dtype)
-
-        self.is_train = train  # TODO: add argument
-        print(self.is_train)
+        self.is_train = train
 
         del test_image
 
@@ -123,7 +122,6 @@ def imagenet_dataset(imagenet_path, scrath_dir, size, train, copy_files, gpu=Fal
         # x = np.transpose(transform.resize((io.imread(path.decode()).astype(np.float32) - 127.5) / 127.5, (size, size)), [2, 0, 1])
         y = label
         x = tf.io.read_file(path)
-        print(size, 'HIEr')
         x = (tf.image.resize(tf.image.decode_jpeg(x, channels=3), [size, size]) / 255)  # TODO: to [-1, 1]
         x = tf.transpose(x, perm=[2, 0, 1])
         return x, y

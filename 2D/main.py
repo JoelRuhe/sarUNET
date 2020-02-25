@@ -1,293 +1,233 @@
-# import argparse
-from networks.opscopy import *
+import argparse
+from networks.ops import *
 from dataset import imagenet_dataset
 from tensorflow.data.experimental import AUTOTUNE
+import horovod.tensorflow as hvd
 import os
 import time
-
-dataset_path = '/nfs/managed_datasets/imagenet-full/'
-scratch_path = '/scratch/joelr/'
-
-size = 256
-batch_size = 16
-hm_epochs = 100
-image_channels = 3
-activation = 'leaky_relu'
-train = True
-gain_param = 0.2
-data_format = 'NCHW'
-output_channels = 64
-final_output = 3
-num_labels = 200
-testset_length = 50
-trainset_length = 1000
-
-is_train = tf.placeholder(tf.bool, name="condition")
-
-dataset_train, imagenet_data_train = imagenet_dataset(dataset_path, scratch_path, size, train, copy_files=True, num_labels=num_labels)
-dataset_train = dataset_train.batch(batch_size, drop_remainder=True)
-dataset_train = dataset_train.repeat()
-dataset_train = dataset_train.prefetch(AUTOTUNE)
-dataset_train = dataset_train.make_one_shot_iterator()
-
-dataset_test, imagenet_data_test = imagenet_dataset(dataset_path, scratch_path, size, train, copy_files=True, num_labels=num_labels)
-dataset_test = dataset_test.batch(batch_size, drop_remainder=True)
-dataset_test = dataset_test.repeat()
-dataset_test = dataset_test.prefetch(AUTOTUNE)
-dataset_test = dataset_test.make_one_shot_iterator()
-
-batch = tf.cond(is_train, lambda: dataset_train.get_next(), lambda: dataset_test.get_next())
-
-if len(batch) == 1:
-    image_input = batch
-    label = None
-elif len(batch) == 2:
-    image_input, label = batch
-else:
-    raise NotImplementedError()
-
-image_input = tf.ensure_shape(image_input, [batch_size, image_channels, size, size])
-
-x_input = image_input + tf.random.normal(shape=image_input.shape) * 0.15
-y = image_input
-
-gopts = tf.GraphOptions(place_pruned_graph=True)
-config = tf.ConfigProto(graph_options=gopts, allow_soft_placement=True)
-config.gpu_options.allow_growth = True
+import random
+import numpy as np
+from networks.blocks import contracting_block, bottleneck, crop_and_concat, expansion_block, final_layer
 
 
-def contracting_block(x, out_channels, activation, param=None, is_training=True):
-    """TODO: Implement with BatchNorm2d"""
-    print(out_channels)
-    with tf.variable_scope("conv1_contract"):
-        print()
-        shape = x.get_shape().as_list()[1:3]
-        kernel = [k(s) for s in shape]
-        con1 = conv2d(x, out_channels, kernel, activation, param)
-        con1 = act(con1, activation, param)
-        print("Shape = " + str(con1.shape))
+def forward(x, args):
 
-    with tf.variable_scope("conv2_contract"):
-        print()
-        shape = con1.get_shape().as_list()[1:3]
-        kernel = [k(s) for s in shape]
-        con2 = conv2d(con1, con1.shape[1].value, kernel, activation, param)
-        con2 = act(con2, activation, param)
-        print("Shape = " + str(con2.shape))
-
-    return con2
-
-
-def bottle_neck(x, out_channels, activation, param=None):
-    """TODO: Implement with BatchNorm2d"""
-
-    with tf.variable_scope("conv1_bottle"):
-        print()
-        shape = x.get_shape().as_list()[1:3]
-        kernel = [k(s) for s in shape]
-        con1 = conv2d(x, out_channels, kernel, activation, param)
-        con1 = act(con1, activation, param)
-        print("Shape = " + str(con1.shape))
-
-    with tf.variable_scope("conv2_bottle"):
-        print()
-        shape = con1.get_shape().as_list()[1:3]
-        kernel = [k(s) for s in shape]
-        con2 = conv2d(con1, out_channels, kernel, activation, param)
-        con2 = act(con2, activation, param)
-        print("Shape = " + str(con2.shape))
-
-    with tf.variable_scope("conv_trans_bottle"):
-        print()
-        shape = con2.get_shape().as_list()[1:3]
-        kernel = [k(s) for s in shape]
-        trans = conv2d_transpose(con2, out_channels // 2, kernel, activation, param)
-        trans = act(trans, activation, param)
-        print("Shape = " + str(trans.shape))
-
-    return trans
-
-
-def expansion_block(x, mid_channels, out_channels, activation, param=None,
-                    is_training=True):
-    """TODO: Implement with BatchNorm2d"""
-
-    with tf.variable_scope("conv1_expanse"):
-        print()
-        shape = x.get_shape().as_list()[1:3]
-        kernel = [k(s) for s in shape]
-        con1 = conv2d(x, mid_channels, kernel, activation, param)
-        con1 = act(con1, activation, param)
-        print("Shape = " + str(con1.shape))
-
-    with tf.variable_scope("conv2_expanse"):
-        print()
-        shape = con1.get_shape().as_list()[1:3]
-        kernel = [k(s) for s in shape]
-        con2 = conv2d(con1, mid_channels, kernel, activation, param)
-        con2 = act(con2, activation, param)
-        print("Shape = " + str(con2.shape))
-
-    with tf.variable_scope("conv_trans"):
-        print()
-        shape = con2.get_shape().as_list()[1:3]
-        kernel = [k(s) for s in shape]
-        trans = conv2d_transpose(con2, out_channels, kernel, activation, param)
-        trans = act(trans, activation, param)
-        print("Shape = " + str(trans.shape))
-
-    return trans
-
-
-def final_layer(x, mid_channels, out_channels, activation, param=None):
-    with tf.variable_scope("conv1_final"):
-        print()
-        print("conv1 :")
-        shape = x.get_shape().as_list()[1:3]
-        kernel = [k(s) for s in shape]
-        con1 = conv2d(x, mid_channels, kernel, activation, param)
-        con1 = act(con1, activation, param)
-        print("Shape = " + str(con1.shape))
-
-    with tf.variable_scope("conv2_final"):
-        print()
-        print("conv2 :")
-        shape = con1.get_shape().as_list()[1:3]
-        kernel = [k(s) for s in shape]
-        con2 = conv2d(con1, mid_channels, kernel, activation, param)
-        con2 = act(con2, activation, param)
-        print("Shape = " + str(con2.shape))
-
-    with tf.variable_scope("conv3_final"):
-        print()
-        print("conv3 :")
-        shape = con2.get_shape().as_list()[1:3]
-        kernel = [k(s) for s in shape]
-        con3 = conv2d(con2, out_channels, kernel, activation, param)
-        con3 = act(con3, activation, param)
-        print("Shape = " + str(con3.shape))
-
-    return con3
-
-
-def crop_and_concat(upsampled, bypass, crop=False):
-    if crop:
-        h = (bypass.shape[2].value - upsampled.shape[2].value) // 2
-        w = (bypass.shape[3].value - upsampled.shape[3].value) // 2
-        bypass = tf.pad(bypass, ([0, 0], [0, 0], [-h, -h], [-w, -w]), "CONSTANT")
-
-    return tf.concat([upsampled, bypass], 1)
-
-
-def forward(x, image_size):
-    counter = 0
+    image_channels = x.shape[1]
+    # Collect nodes that need to be connected further downstream.
     tensor_list = list()
-    output_channels = 64
-    while image_size > 4:
-        image_size = image_size//2
-        counter = counter + 1
 
-    print("\n-----CONTRACTION-----")
+    image_size = x.get_shape().as_list()[-1]
+    # Number of downsample steps to go down to a spatial resolution of 4x4.
+    num_downsamples = int(np.log2(image_size) - np.log2(4))
 
-    for i in range(counter):
-        print("contract"+str(i))
-        with tf.variable_scope("contract"+str(i)):
-            x = contracting_block(x, output_channels, activation=activation, param=gain_param)
+    for i in range(num_downsamples):
+        with tf.variable_scope("contract_" + str(i)):
+            num_channels = args.base_channels if i == 0 else x.shape[1] * 2
+            x = contracting_block(x, num_channels, activation=args.activation, param=args.leakiness)
             tensor_list.append(x)
-            print("maxpool")
-            x = maxpool2d(x, (2, 2), (2, 2), padding="SAME", data_format=data_format)
-            output_channels = x.shape[1].value * 2
+            # TODO: Replace with bilinear up/down
+            x = maxpool2d(x, (2, 2), (2, 2))
 
-    print("\n-----BOTTLENECK-----")
-
-    x = bottle_neck(x, x.shape[1].value * 2, activation=activation, param=gain_param)
-
-    print("\n-----EXPANSION-----")
+    x = bottleneck(x, x.shape[1] * 2, activation=args.activation, param=args.leakiness)
 
     for i in reversed(range(len(tensor_list) - 1)):
         x = crop_and_concat(x, tensor_list[i + 1], crop=True)
-        print("expanse"+str(i))
-        with tf.variable_scope("expanse" + str(i)):
-            x = expansion_block(x, x.shape[1].value // 2, x.shape[1].value // 4, activation=activation, param=gain_param)
+        with tf.variable_scope("expand_" + str(i)):
+            # TODO: Replace with bilinear up/down
+            x = expansion_block(x, x.shape[1] // 2, x.shape[1] // 4, activation=args.activation, param=args.leakiness)
 
     x = crop_and_concat(x, tensor_list[0], crop=True)
-    print("\n-----FINAL-----")
 
-    with tf.variable_scope("final"):
-        x = final_layer(x, x.shape[1].value // 2, 3, activation=activation, param=gain_param)
+    with tf.variable_scope("expand_" + str(len(tensor_list))):
+        x = final_layer(x, x.shape[1].value // 2, image_channels, activation=args.activation, param=args.leakiness)
 
     return x
 
 
-if __name__ == "__main__":
+def main(args, config):
 
-    # parser = argparse.ArgumentParser()
-    # parser.add_argument('image_size', type=str, help="'height or width, eg. 128'")
-    # parser.add_argument('batch_size', type=int, default=256)
-    # parser.add_argument('--dataset_path', type=str, default='/nfs/managed_datasets/imagenet-full/')
-    # parser.add_argument('--scratch_path', type=str, default='/scratch/joelr/')
-    # parser.add_argument('--loss_fn', default='mean_squared_error', choices=['mean_squared_error'])
-    # parser.add_argument('--activation', type=str, default='leaky_relu')
-    # parser.add_argument('--leakiness', type=float, default=0.2)
-    # parser.add_argument('--num_labels', default=None, type=int)
-    # args = parser.parse_args()
+    verbose = hvd.rank() == 0 if args.horovod else True
 
-    prediction = forward(x_input, size)
+    # ---------------- DATASET ---------------
+
+    # Train data pipeline
+    is_train = tf.placeholder(tf.bool, name="is_train")
+    dataset_train, imagenet_data_train = imagenet_dataset(args.dataset_root, args.scratch_path, args.image_size,
+                                                          train=True, copy_files=True, num_labels=args.num_labels)
+    dataset_train = dataset_train.batch(args.batch_size, drop_remainder=True)
+    dataset_train = dataset_train.repeat()
+    dataset_train = dataset_train.prefetch(AUTOTUNE)
+    dataset_train = dataset_train.make_one_shot_iterator()
+
+    # Test data pipeline
+    dataset_test, imagenet_data_test = imagenet_dataset(args.dataset_root, args.scratch_path, args.image_size,
+                                                        train=True, copy_files=True, num_labels=args.num_labels)
+    dataset_test = dataset_test.batch(args.batch_size, drop_remainder=True)
+    dataset_test = dataset_test.repeat()
+    dataset_test = dataset_test.prefetch(AUTOTUNE)
+    dataset_test = dataset_test.make_one_shot_iterator()
+
+    # Fetch batch conditioned on the mode (train/test) we're in.
+    batch = tf.cond(is_train, lambda: dataset_train.get_next(), lambda: dataset_test.get_next())
+
+    if len(batch) == 1:
+        image_input = batch
+        label = None
+    elif len(batch) == 2:
+        image_input, label = batch
+    else:
+        raise NotImplementedError()
+
+    image_channels = image_input.shape[1]
+    image_input = tf.ensure_shape(image_input, [args.batch_size, image_channels, args.image_size, args.image_size])
+
+    # Add noise to input.
+    x_input = image_input + tf.random.normal(shape=image_input.shape) * args.noise_strength
+    y = image_input
+
+    # ------------------ NETWORK ----------------
+
+    prediction = forward(x_input, args)
+
+    # ------------------ OPTIM -----------------
+
     loss = tf.losses.mean_squared_error(labels=y, predictions=prediction)
-    optimizer = tf.train.AdamOptimizer(0.0001).minimize(loss)
+    lr_scaler = hvd.size() if args.horovod else 1
+    optimizer = tf.compat.v1.train.AdamOptimizer(args.learning_rate * lr_scaler)
 
+    if args.horovod:
+        optimizer = hvd.DistributedOptimizer(optimizer)
+
+    train_step = optimizer.minimize(loss)
+
+    # ------------- SUMMARIES -------------
+
+    # Transpose to valid image format.
     x_input = tf.transpose(x_input, perm=[0, 2, 3, 1])
     y = tf.transpose(y, perm=[0, 2, 3, 1])
     prediction = tf.transpose(prediction, perm=[0, 2, 3, 1])
 
-    prediction = tf.clip_by_value(prediction, clip_value_min=0, clip_value_max=1)
+    # Clip to obtain valid image values.
 
+    prediction = tf.clip_by_value(prediction, clip_value_min=0, clip_value_max=1)
     with tf.variable_scope("train_summaries"):
         train_loss = tf.summary.scalar('loss', loss)
-        train_imageNoise = tf.summary.image('train_imageNoise', x_input)
-        train_imageRemake = tf.summary.image('train_imageRemake', prediction)
-        train_imageReal = tf.summary.image('train_imageReal', y)
+        train_x = tf.summary.image('train_x', x_input)
+        train_pred = tf.summary.image('train_pred', prediction)
+        train_y = tf.summary.image('train_y', y)
+        image_summary_train = tf.summary.merge([train_loss, train_y, train_pred, train_x])
 
     with tf.variable_scope("test_summaries"):
-        test_imageNoise = tf.summary.image('test_imageNoise', x_input)
-        test_imageRemake = tf.summary.image('test_imageRemake', prediction)
-        test_imageReal = tf.summary.image('test_imageReal', y)
+        test_x = tf.summary.image('test_x', x_input)
+        test_pred = tf.summary.image('test_pred', prediction)
+        test_y = tf.summary.image('test_y', y)
+        image_summary_test = tf.summary.merge([test_x, test_pred, test_y])
 
-    image_summary_train = tf.summary.merge([train_loss, train_imageReal, train_imageRemake, train_imageNoise])
-    image_summary_test = tf.summary.merge([test_imageNoise, test_imageRemake, test_imageReal])
+    # -------------- SESSION -------------
 
     with tf.Session(config=config) as sess:
+
         sess.run(tf.initialize_all_variables())
 
         timestamp = time.strftime("%Y-%m-%d_%H:%M:%S", time.gmtime())
         logdir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'runs', timestamp)
         writer = tf.summary.FileWriter(logdir=logdir, graph=sess.graph, session=sess)
 
-        for epoch in range(hm_epochs):
+        for epoch in range(args.epochs):
             epoch_loss_train = 0
             epoch_loss_test = 0
-            for i in range(len(imagenet_data_train) // batch_size):
-                train = True
-                _, summary, c = sess.run([optimizer, image_summary_train, loss], feed_dict={is_train: train})
-                global_step = (epoch * (len(imagenet_data_train)) // batch_size * batch_size) + i * batch_size
-                writer.add_summary(summary, global_step)
+            num_train_steps = len(imagenet_data_train) // args.batch_size
+            num_test_steps = len(imagenet_data_test) // args.batch_size
 
-                epoch_loss_train = epoch_loss_train + c
+            for i in range(num_train_steps):
+                train = True
+                _, summary, c = sess.run([train_step, image_summary_train, loss], feed_dict={is_train: train})
+                global_step = (epoch * num_train_steps * args.batch_size) + i * args.batch_size
+
+                if i % args.logging_interval == 0:
+                    writer.add_summary(summary, global_step)
+
+                epoch_loss_train += c
                 writer.flush()
 
-            for i in range(len(imagenet_data_test) // batch_size):
+            for i in range(num_test_steps):
                 train = False
                 c = sess.run(loss, feed_dict={is_train: train})
 
-                epoch_loss_test = epoch_loss_test + c
+                epoch_loss_test += c
 
             writer.add_summary(tf.Summary(value=[
-                tf.Summary.Value(tag='loss_test', simple_value=epoch_loss_test/testset_length)]), global_step)
+                tf.Summary.Value(tag='loss_test', simple_value=epoch_loss_test / num_test_steps)]), global_step)
 
             test_image_summary = sess.run(image_summary_test, feed_dict={is_train: train})
             writer.add_summary(test_image_summary, global_step)
 
             writer.flush()
 
-            print('Epoch', epoch, 'completed out of', hm_epochs, 'loss_train:', epoch_loss_train/trainset_length, 'loss_test:',
-                  epoch_loss_test/testset_length)
+            if verbose:
+                print(f'Epoch [{epoch}/{args.epochs}]'
+                      f'Train Loss: {epoch_loss_train / num_train_steps}'
+                      f'Test Loss: {epoch_loss_test / num_test_steps}')
+
+
+if __name__ == "__main__":
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--dataset', type=str, required=True, choices=['imagenet'])
+    parser.add_argument('--dataset_root', type=str, required=True)
+    parser.add_argument('--image_size', type=int, help="'height or width, eg: 128'", required=True)
+    parser.add_argument('--batch_size', type=int, default=128)
+    parser.add_argument('--scratch_path', type=str, default=f'/scratch/{os.environ["USER"]}/')
+    parser.add_argument('--loss_fn', default='mean_squared_error', choices=['mean_squared_error'])
+    parser.add_argument('---noise_strength', type=float, default=0.15)
+    parser.add_argument('--activation', type=str, default='leaky_relu')
+    parser.add_argument('--leakiness', type=float, default=0.2)
+    parser.add_argument('--num_labels', default=2, type=int)
+    parser.add_argument('--epochs', default=100, type=int)
+    parser.add_argument('--image_channels', default=3, type=int)
+    parser.add_argument('--base_channels', default=64, type=int, help='Controls network complexity (parameters).')
+    parser.add_argument('--learning_rate', default=1e-4, type=float)
+    parser.add_argument('--logging_interval', default=8, type=int)
+    parser.add_argument('--horovod', default=False, action='store_true')
+    parser.add_argument('--seed', default=42, type=int)
+    parser.add_argument('--gpu', action='store_true')
+    args = parser.parse_args()
+
+    print('------------------ RUN CONFIRURATION --------------------\n')
+    print('KEY\t\t\tVALUE')
+    for arg in vars(args):
+        print(f'{arg:<20}\t{getattr(args, arg):<40}')
+    print('---------------------------------------------------------\n')
+
+    # Assert image_size is a multiple of two.
+    assert float(np.log2(args.image_size)) == int(np.log2(args.image_size))
+
+    if args.horovod:
+        hvd.init()
+        np.random.seed(args.seed + hvd.rank())
+        tf.random.set_random_seed(args.seed + hvd.rank())
+        random.seed(args.seed + hvd.rank())
+
+        print(f"Rank {hvd.rank()}:{hvd.local_rank()} reporting!")
+
+    else:
+        np.random.seed(args.seed)
+        tf.random.set_random_seed(args.seed)
+        random.seed(args.seed)
+
+    gopts = tf.GraphOptions(place_pruned_graph=True)
+    config = tf.ConfigProto(graph_options=gopts, allow_soft_placement=True)
+
+    if args.gpu:
+        config.gpu_options.allow_growth = True
+        if args.horovod:
+            config.gpu_options.visible_device_list = str(hvd.local_rank())
+
+    else:
+        config = tf.ConfigProto(graph_options=gopts,
+                                intra_op_parallelism_threads=int(os.environ['OMP_NUM_THREADS']),
+                                inter_op_parallelism_threads=args.num_inter_ops,
+                                allow_soft_placement=True,
+                                device_count={'CPU': int(os.environ['OMP_NUM_THREADS'])})
+
+    main(args, config)

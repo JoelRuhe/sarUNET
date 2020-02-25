@@ -1,6 +1,6 @@
 import tensorflow as tf
 import numpy as np
-# import horovod.tensorflow as hvd
+import horovod.tensorflow as hvd
 
 
 def k(x):
@@ -28,6 +28,16 @@ def calculate_gain(activation, param=None):
         else:
             raise ValueError("negative_slope {} not a valid number".format(param))
         return np.sqrt(2.0 / (1 + negative_slope ** 2))
+
+    elif activation == 'leaky_relu_native':
+        assert param is not None
+        if not isinstance(param, bool) and isinstance(param, int) or isinstance(param, float):
+            # True/False are instances of int, hence check above
+            negative_slope = param
+        else:
+            raise ValueError("negative_slope {} not a valid number".format(param))
+        return np.sqrt(2.0 / (1 + negative_slope ** 2))
+
     else:
         raise ValueError("Unsupported nonlinearity {}".format(activation))
 
@@ -35,13 +45,16 @@ def calculate_gain(activation, param=None):
 def get_weight(shape, activation, lrmul=1, use_eq_lr=False, param=None):
     """Get a weight variable."""
     fan_in = np.prod(shape[:-1])
-    print("Fan-in = " + str(fan_in.shape))
     gain = calculate_gain(activation, param)
     he_std = gain / np.sqrt(fan_in)
-    runtime_coef = he_std * lrmul
-    init_std = 1 / runtime_coef if use_eq_lr else 1 / lrmul
-    w = tf.get_variable("weight", shape=shape,
-                            initializer=tf.initializers.random_normal(0, init_std))
+    if use_eq_lr:
+        init_std = 1.0 / lrmul
+        runtime_coef = he_std * lrmul
+    else:
+        init_std = he_std / lrmul
+        runtime_coef = lrmul
+
+    w = tf.get_variable("weight", shape=shape, initializer=tf.initializers.random_normal(0, init_std)) * runtime_coef
 
     if use_eq_lr:
         w *= runtime_coef
@@ -50,7 +63,7 @@ def get_weight(shape, activation, lrmul=1, use_eq_lr=False, param=None):
 
 
 def apply_bias(x, lrmul=1):
-    b = tf.get_variable('bias', shape=[x.shape[1]], initializer=tf.initializers.random_normal()) * lrmul
+    b = tf.get_variable('bias', shape=[x.shape[3]], initializer=tf.initializers.random_normal()) * lrmul
     b = tf.cast(b, x.dtype)
     if len(x.shape) == 2:
         return x + b
@@ -66,31 +79,19 @@ def dense(x, fmaps, activation, lrmul=1, param=None):
 
 
 def conv2d(x, fmaps, kernel, activation, param=None, lrmul=1):
-    print("Kernel = " + str(kernel))
-
     w = get_weight([*kernel, x.shape[1].value, fmaps], activation, param=param, lrmul=lrmul)
-    print("Weight = " + str(w.shape))
     return tf.nn.conv2d(x, w, strides=[1, 1, 1, 1], padding='SAME', data_format='NCHW')
 
 
 def conv2d_transpose(x, fmaps, kernel, activation, param=None, lrmul=1):
-    print("Kernel = " + str(kernel))
-
     output_shape = tf.stack([x.shape[0].value, fmaps, int(x.shape[2].value*2), int(x.shape[2].value*2)])
     w = get_weight([*kernel, x.shape[1].value, fmaps], activation, param=param, lrmul=lrmul)
-    print("Weight = " + str(w.shape))
     w = tf.transpose(w, perm=[0, 1, 3, 2])
-    print("Weight = " + str(w.shape))
     return tf.nn.conv2d_transpose(x, w, output_shape, strides=[2, 2], padding='SAME', data_format='NCHW')
 
 
-def maxpool2d(x, pool_size, strides, padding, data_format):
-    return tf.nn.max_pool2d(x, pool_size, strides, padding, data_format)
-
-
-def conv3d(x, fmaps, kernel, activation, param=None, lrmul=1):
-    w = get_weight([*kernel, x.shape[1].value, fmaps], activation, param=param, lrmul=lrmul)
-    return tf.nn.conv3d(x, w, strides=[1, 1, 1, 1, 1], padding='SAME', data_format='NCDHW')
+def maxpool2d(x, pool_size, strides):
+    return tf.nn.max_pool2d(x, pool_size, strides, padding='SAME', data_format='NCHW')
 
 
 def leaky_relu(x, alpha_lr=0.2):
@@ -117,11 +118,21 @@ def act(x, activation, param=None):
         return leaky_relu(x, alpha_lr=param)
     elif activation == 'linear':
         return x
+    elif activation == 'leaky_relu_native':
+        assert param is not None
+        return tf.nn.leaky_relu(x, alpha=param)
     else:
         raise ValueError(f"Unknown activation {activation}")
 
 
 def horovod_batch_normalization(x, is_training=True, decay=.9, data_format='channels_first'):
+
+    # Check whether Horovod is initialized.
+    try:
+        hvd.size()
+        use_hvd = True
+    except ValueError:
+        use_hvd = False
 
     shape = [1 for _ in range(len(x.shape))]
     if data_format == 'channels_first':
@@ -138,19 +149,21 @@ def horovod_batch_normalization(x, is_training=True, decay=.9, data_format='chan
     gamma = tf.get_variable('gamma', shape=shape, initializer=tf.initializers.ones())
     beta = tf.get_variable('beta', shape=shape, initializer=tf.initializers.zeros())
 
-    # global_mean = hvd.allreduce(mean)
-    # global_var = hvd.allreduce(var)
+    if use_hvd:
+        global_mean = hvd.allreduce(mean)
+        global_var = hvd.allreduce(var)
+    else:
+        global_mean = mean
+        global_var = var
 
     ema_mean = tf.get_variable('ema_mean', shape=mean.shape, initializer=tf.initializers.zeros(), trainable=False)
     ema_var = tf.get_variable('ema_var', shape=var.shape, initializer=tf.initializers.ones(), trainable=False)
 
-    # ema_mean = decay * ema_mean + (1 - decay) * global_mean
-    # ema_var = decay * ema_var + (1 - decay) * global_var
+    ema_mean = decay * ema_mean + (1 - decay) * global_mean
+    ema_var = decay * ema_var + (1 - decay) * global_var
 
     if not is_training:
         global_mean = ema_mean
         global_var = ema_var
 
     return tf.nn.batch_normalization(x, global_mean, global_var, offset=beta, scale=gamma, variance_epsilon=1e-8)
-
-
