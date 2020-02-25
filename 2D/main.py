@@ -1,4 +1,4 @@
-import argparse
+# import argparse
 from networks.opscopy import *
 from dataset import imagenet_dataset
 from tensorflow.data.experimental import AUTOTUNE
@@ -18,7 +18,7 @@ gain_param = 0.2
 data_format = 'NCHW'
 output_channels = 64
 final_output = 3
-num_labels = 250
+num_labels = 200
 testset_length = 50
 trainset_length = 1000
 
@@ -182,7 +182,7 @@ def crop_and_concat(upsampled, bypass, crop=False):
 def forward(x, image_size):
     counter = 0
     tensor_list = list()
-
+    output_channels = 64
     while image_size > 4:
         image_size = image_size//2
         counter = counter + 1
@@ -214,23 +214,23 @@ def forward(x, image_size):
     print("\n-----FINAL-----")
 
     with tf.variable_scope("final"):
-        x = final_layer(x, x.shape[1].value // 2, final_output, activation=activation, param=gain_param)
+        x = final_layer(x, x.shape[1].value // 2, 3, activation=activation, param=gain_param)
 
     return x
 
 
 if __name__ == "__main__":
 
-    parser = argparse.ArgumentParser()
-    parser.add_argument('image_size', type=str, help="'height or width, eg. 128'")
-    parser.add_argument('batch_size', type=int, default=256)
-    parser.add_argument('--dataset_path', type=str, default='/nfs/managed_datasets/imagenet-full/')
-    parser.add_argument('--scratch_path', type=str, default='/scratch/joelr/')
-    parser.add_argument('--loss_fn', default='mean_squared_error', choices=['mean_squared_error'])
-    parser.add_argument('--activation', type=str, default='leaky_relu')
-    parser.add_argument('--leakiness', type=float, default=0.2)
-    parser.add_argument('--num_labels', default=None, type=int)
-    args = parser.parse_args()
+    # parser = argparse.ArgumentParser()
+    # parser.add_argument('image_size', type=str, help="'height or width, eg. 128'")
+    # parser.add_argument('batch_size', type=int, default=256)
+    # parser.add_argument('--dataset_path', type=str, default='/nfs/managed_datasets/imagenet-full/')
+    # parser.add_argument('--scratch_path', type=str, default='/scratch/joelr/')
+    # parser.add_argument('--loss_fn', default='mean_squared_error', choices=['mean_squared_error'])
+    # parser.add_argument('--activation', type=str, default='leaky_relu')
+    # parser.add_argument('--leakiness', type=float, default=0.2)
+    # parser.add_argument('--num_labels', default=None, type=int)
+    # args = parser.parse_args()
 
     prediction = forward(x_input, size)
     loss = tf.losses.mean_squared_error(labels=y, predictions=prediction)

@@ -123,7 +123,7 @@ def imagenet_dataset(imagenet_path, scrath_dir, size, train, copy_files, gpu=Fal
         # x = np.transpose(transform.resize((io.imread(path.decode()).astype(np.float32) - 127.5) / 127.5, (size, size)), [2, 0, 1])
         y = label
         x = tf.io.read_file(path)
-
+        print(size, 'HIEr')
         x = (tf.image.resize(tf.image.decode_jpeg(x, channels=3), [size, size]) / 255)  # TODO: to [-1, 1]
         x = tf.transpose(x, perm=[2, 0, 1])
         return x, y
