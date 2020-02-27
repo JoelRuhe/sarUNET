@@ -47,13 +47,14 @@ def forward(x, args):
 def main(args, config):
 
     verbose = hvd.rank() == 0 if args.horovod else True
+    global_batch_size = args.batch_size * hvd.size() if args.horovod else args.batch_size
 
     # ---------------- DATASET ---------------
 
     # Train data pipeline
     is_train = tf.placeholder(tf.bool, name="is_train")
     dataset_train, imagenet_data_train = imagenet_dataset(args.dataset_root, args.scratch_path, args.image_size,
-                                                          train=True, copy_files=True, num_labels=args.num_labels)
+                                                          train=True, copy_files=verbose, num_labels=args.num_labels)
     dataset_train = dataset_train.batch(args.batch_size, drop_remainder=True)
     dataset_train = dataset_train.repeat()
     dataset_train = dataset_train.prefetch(AUTOTUNE)
@@ -61,7 +62,7 @@ def main(args, config):
 
     # Test data pipeline
     dataset_test, imagenet_data_test = imagenet_dataset(args.dataset_root, args.scratch_path, args.image_size,
-                                                        train=True, copy_files=True, num_labels=args.num_labels)
+                                                        train=False, copy_files=verbose, num_labels=args.num_labels)
     dataset_test = dataset_test.batch(args.batch_size, drop_remainder=True)
     dataset_test = dataset_test.repeat()
     dataset_test = dataset_test.prefetch(AUTOTUNE)
@@ -83,6 +84,11 @@ def main(args, config):
 
     # Add noise to input.
     x_input = image_input + tf.random.normal(shape=image_input.shape) * args.noise_strength
+    # x_input = image_input + tf.random.gamma(shape=image_input.shape, alpha=[1]) * args.noise_strength
+    # x_input = x_input + tf.random.poisson(shape=x_input.shape)
+    x_input = x_input + tf.random.uniform(shape=x_input.shape) * args.noise_strength
+
+
     y = image_input
 
     # ------------------ NETWORK ----------------
@@ -128,46 +134,41 @@ def main(args, config):
     with tf.Session(config=config) as sess:
 
         sess.run(tf.initialize_all_variables())
-
-        timestamp = time.strftime("%Y-%m-%d_%H:%M:%S", time.gmtime())
-        logdir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'runs', timestamp)
-        writer = tf.summary.FileWriter(logdir=logdir, graph=sess.graph, session=sess)
+        if verbose:
+            timestamp = time.strftime("%Y-%m-%d_%H:%M:%S", time.gmtime())
+            logdir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'runs', timestamp)
+            writer = tf.summary.FileWriter(logdir=logdir, graph=sess.graph, session=sess)
 
         for epoch in range(args.epochs):
             epoch_loss_train = 0
             epoch_loss_test = 0
-            num_train_steps = len(imagenet_data_train) // args.batch_size
-            num_test_steps = len(imagenet_data_test) // args.batch_size
-
+            num_train_steps = len(imagenet_data_train) // global_batch_size
+            num_test_steps = len(imagenet_data_test) // global_batch_size
+            train = True
             for i in range(num_train_steps):
-                train = True
                 _, summary, c = sess.run([train_step, image_summary_train, loss], feed_dict={is_train: train})
-                global_step = (epoch * num_train_steps * args.batch_size) + i * args.batch_size
 
-                if i % args.logging_interval == 0:
+                if i % args.logging_interval == 0 and verbose:
+                    global_step = (epoch * num_train_steps * global_batch_size) + i * global_batch_size
                     writer.add_summary(summary, global_step)
+                    writer.flush()
+                    epoch_loss_train += c
 
-                epoch_loss_train += c
+            train = False
+            for i in range(num_test_steps):
+                c = sess.run(loss, feed_dict={is_train: train})
+            if verbose:
+                epoch_loss_test += c
+                writer.add_summary(tf.Summary(value=[
+                    tf.Summary.Value(tag='loss_test', simple_value=epoch_loss_test / num_test_steps)]), global_step)
+                test_image_summary = sess.run(image_summary_test, feed_dict={is_train: train})
+                writer.add_summary(test_image_summary, global_step)
                 writer.flush()
 
-            for i in range(num_test_steps):
-                train = False
-                c = sess.run(loss, feed_dict={is_train: train})
-
-                epoch_loss_test += c
-
-            writer.add_summary(tf.Summary(value=[
-                tf.Summary.Value(tag='loss_test', simple_value=epoch_loss_test / num_test_steps)]), global_step)
-
-            test_image_summary = sess.run(image_summary_test, feed_dict={is_train: train})
-            writer.add_summary(test_image_summary, global_step)
-
-            writer.flush()
-
             if verbose:
-                print(f'Epoch [{epoch}/{args.epochs}]'
-                      f'Train Loss: {epoch_loss_train / num_train_steps}'
-                      f'Test Loss: {epoch_loss_test / num_test_steps}')
+                print(f'Epoch [{epoch}/{args.epochs}]\t'
+                      f'Train Loss: {epoch_loss_train / num_train_steps}\t'
+                      f'Test Loss: {epoch_loss_test / num_test_steps}\t')
 
 
 if __name__ == "__main__":
@@ -179,12 +180,11 @@ if __name__ == "__main__":
     parser.add_argument('--batch_size', type=int, default=128)
     parser.add_argument('--scratch_path', type=str, default=f'/scratch/{os.environ["USER"]}/')
     parser.add_argument('--loss_fn', default='mean_squared_error', choices=['mean_squared_error'])
-    parser.add_argument('---noise_strength', type=float, default=0.15)
+    parser.add_argument('--noise_strength', type=float, default=0.1)
     parser.add_argument('--activation', type=str, default='leaky_relu')
     parser.add_argument('--leakiness', type=float, default=0.2)
     parser.add_argument('--num_labels', default=2, type=int)
     parser.add_argument('--epochs', default=100, type=int)
-    parser.add_argument('--image_channels', default=3, type=int)
     parser.add_argument('--base_channels', default=64, type=int, help='Controls network complexity (parameters).')
     parser.add_argument('--learning_rate', default=1e-4, type=float)
     parser.add_argument('--logging_interval', default=8, type=int)

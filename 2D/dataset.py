@@ -7,7 +7,7 @@ import time
 import tensorflow as tf
 from tensorflow.data.experimental import AUTOTUNE
 from tqdm import tqdm
-# import horovod.tensorflow as hvd
+import horovod.tensorflow as hvd
 
 # Imagenet_dir /nfs/managed_datasets/imagenet-full/
 class ImageNetDataset:

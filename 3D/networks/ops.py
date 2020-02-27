@@ -117,7 +117,7 @@ def conv3d_transpose(x, fmaps, kernel, activation, param=None, lrmul=1):
     print("Kernel = " + str(kernel))
     print(fmaps)
     print("x.shape = " + str(x.shape))
-    output_shape = tf.stack([x.shape[0].value, fmaps, int(x.shape[2].value*2), int(x.shape[2].value*2), int(x.shape[2].value*2)])
+    output_shape = tf.stack([x.shape[0].value, fmaps, int(x.shape[2].value*2), int(x.shape[3].value*2), int(x.shape[4].value*2)])
     print("output_shape = " + str(output_shape.shape))
     w = get_weight([*kernel, x.shape[1].value, fmaps], activation, param=param, lrmul=lrmul)
     print("Weight1 = " + str(w.shape))
