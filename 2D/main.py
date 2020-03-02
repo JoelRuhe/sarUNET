@@ -82,10 +82,7 @@ def main(args, config):
     image_channels = image_input.shape[1]
     image_input = tf.ensure_shape(image_input, [args.batch_size, image_channels, args.image_size, args.image_size])
 
-    # Add noise to input.
     x_input = image_input + tf.random.normal(shape=image_input.shape) * args.noise_strength
-    # x_input = image_input + tf.random.gamma(shape=image_input.shape, alpha=[1]) * args.noise_strength
-    # x_input = x_input + tf.random.poisson(shape=x_input.shape)
     x_input = x_input + tf.random.uniform(shape=x_input.shape) * args.noise_strength
 
 
@@ -186,7 +183,7 @@ if __name__ == "__main__":
     parser.add_argument('--num_labels', default=2, type=int)
     parser.add_argument('--epochs', default=100, type=int)
     parser.add_argument('--base_channels', default=64, type=int, help='Controls network complexity (parameters).')
-    parser.add_argument('--learning_rate', default=1e-4, type=float)
+    parser.add_argument('--learning_rate', default=1e-5, type=float)
     parser.add_argument('--logging_interval', default=8, type=int)
     parser.add_argument('--horovod', default=False, action='store_true')
     parser.add_argument('--seed', default=42, type=int)

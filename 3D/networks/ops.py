@@ -80,23 +80,14 @@ def dense(x, fmaps, activation, lrmul=1, param=None):
 
 
 def conv2d(x, fmaps, kernel, activation, param=None, lrmul=1):
-    print("Kernel = " + str(kernel))
     w = get_weight([*kernel, x.shape[1].value, fmaps], activation, param=param, lrmul=lrmul)
-    print("Weight = " + str(w.shape))
-    print(x.shape)
     return tf.nn.conv2d(x, w, strides=[1, 1, 1, 1], padding='SAME', data_format='NCHW')
 
 
 def conv2d_transpose(x, fmaps, kernel, activation, param=None, lrmul=1):
-    print("Kernel = " + str(kernel))
-    print(fmaps)
-    print("x.shape = " + str(x.shape))
     output_shape = tf.stack([x.shape[0].value, fmaps, int(x.shape[2].value*2), int(x.shape[2].value*2)])
-    print("output_shape = " + str(output_shape.shape))
     w = get_weight([*kernel, x.shape[1].value, fmaps], activation, param=param, lrmul=lrmul)
-    print("Weight1 = " + str(w.shape))
     w = tf.transpose(w, perm=[0, 1, 3, 2])
-    print("Weight2 = " + str(w.shape))
     return tf.nn.conv2d_transpose(x, w, output_shape, strides=[2, 2], padding='SAME', data_format='NCHW')
 
 
@@ -105,24 +96,14 @@ def maxpool2d(x, pool_size, strides, padding, data_format):
 
 
 def conv3d(x, fmaps, kernel, activation, param=None, lrmul=1):
-    print("Kernel = " + str(kernel))
-    print(fmaps)
-    print("x.shape = " + str(x.shape))
     w = get_weight([*kernel, x.shape[1].value, fmaps], activation, param=param, lrmul=lrmul)
-    print("Weight = " + str(w.shape))
     return tf.nn.conv3d(x, w, strides=[1, 1, 1, 1, 1], padding='SAME', data_format='NCDHW')
 
 
 def conv3d_transpose(x, fmaps, kernel, activation, param=None, lrmul=1):
-    print("Kernel = " + str(kernel))
-    print(fmaps)
-    print("x.shape = " + str(x.shape))
     output_shape = tf.stack([x.shape[0].value, fmaps, int(x.shape[2].value*2), int(x.shape[3].value*2), int(x.shape[4].value*2)])
-    print("output_shape = " + str(output_shape.shape))
     w = get_weight([*kernel, x.shape[1].value, fmaps], activation, param=param, lrmul=lrmul)
-    print("Weight1 = " + str(w.shape))
     w = tf.transpose(w, perm=[0, 1, 2, 4, 3])
-    print("Weight2 = " + str(w.shape))
     return tf.nn.conv3d_transpose(x, w, output_shape, strides=[2, 2, 2], padding='SAME', data_format='NCDHW')
 
 

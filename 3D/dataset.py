@@ -5,6 +5,7 @@ import shutil
 import time
 import tensorflow as tf
 from tensorflow.data.experimental import AUTOTUNE
+from tqdm import tqdm
 
 
 
@@ -37,7 +38,7 @@ class NumpyDataset:
         test_npy_array = np.load(self.npy_files[0])[np.newaxis, ...]
         self.shape = test_npy_array.shape
         self.dtype = test_npy_array.dtype
-        del test_npy_array
+        # del test_npy_array
 
     def __iter__(self):
         for path in self.npy_files:
@@ -51,49 +52,6 @@ class NumpyDataset:
 
 
 class NumpyPathDataset:
-    def __init__(self, npy_dir, scratch_dir, copy_files, is_correct_phase):
-        super(NumpyPathDataset, self).__init__()
-        self.npy_files = glob.glob(npy_dir + '*.npy')
-
-
-        if scratch_dir is not None:
-            if scratch_dir[-1] == '/':
-                scratch_dir = scratch_dir[:-1]
-
-        self.scratch_dir = os.path.normpath(scratch_dir + npy_dir) if is_correct_phase else npy_dir
-        if copy_files and is_correct_phase:
-            os.makedirs(self.scratch_dir, exist_ok=True)
-            print("Copying files to scratch...")
-            for f in self.npy_files:
-                # os.path.isdir(self.scratch_dir)
-                if not os.path.isfile(os.path.normpath(scratch_dir + f)):
-                    shutil.copy(f, os.path.normpath(scratch_dir + f))
-
-        while len(glob.glob(self.scratch_dir + '/*.npy')) < len(self.npy_files):
-            time.sleep(1)
-
-        self.scratch_files = glob.glob(self.scratch_dir + '/*.npy')
-        assert len(self.scratch_files) == len(self.npy_files)
-
-        test_npy_array = np.load(self.npy_files[0])[np.newaxis, ...]
-        self.shape = test_npy_array.shape
-        self.dtype = test_npy_array.dtype
-        del test_npy_array
-
-        # for i in range(self.npy_files):
-        #     if self.npy_files[i].
-
-    def __iter__(self):
-        for path in self.npy_files:
-            yield path
-
-    def __getitem__(self, idx):
-        return self.npy_files[idx]
-
-    def __len__(self):
-        return len(self.npy_files)
-
-
 
     # def __init__(self, npy_dir, scratch_dir, copy_files, is_correct_phase):
     #     super(NumpyPathDataset, self).__init__()
@@ -110,7 +68,7 @@ class NumpyPathDataset:
     #     if copy_files and is_correct_phase:
     #         os.makedirs(self.scratch_dir, exist_ok=True)
     #         print("Copying files to scratch...")
-    #         for f in self.npy_files:
+    #         for f in tqdm(self.npy_files):
     #             # os.path.isdir(self.scratch_dir)
     #             if not os.path.isfile(os.path.normpath(scratch_dir + f)):
     #                 shutil.copy(f, os.path.normpath(scratch_dir + f))
@@ -126,8 +84,6 @@ class NumpyPathDataset:
     #     self.dtype = test_npy_array.dtype
     #     del test_npy_array
     #
-    #     # for i in range(self.npy_files):
-    #     #     if self.npy_files[i].
     #
     # def __iter__(self):
     #     for path in self.npy_files:
@@ -140,16 +96,86 @@ class NumpyPathDataset:
     #     return len(self.npy_files)
 
 
+    def __init__(self, npy_dir, scratch_dir, train, train_size, copy_files, is_correct_phase):
+        super(NumpyPathDataset, self).__init__()
+        self.npy_files = glob.glob(npy_dir + '*.npy')
+
+        npy_length = int(len(self.npy_files))
+        npy_train_length = int(npy_length * train_size)
+        npy_test_length = int(npy_length * (1-train_size))
+
+        self.npy_train_files = self.npy_files[0: npy_train_length]
+        self.npy_test_files = self.npy_files[npy_train_length: (npy_train_length + npy_test_length) + 1]
+        self.is_train = train
+
+        print("Lenght of training files = " + str(len(self.npy_train_files)))
+        print("Lenght of test files = " + str(len(self.npy_test_files)))
+
+        if scratch_dir is not None:
+            if scratch_dir[-1] == '/':
+                scratch_dir = scratch_dir[:-1]
+
+        self.scratch_dir = os.path.normpath(scratch_dir + npy_dir) if is_correct_phase else npy_dir
+        if copy_files and is_correct_phase:
+            os.makedirs(self.scratch_dir, exist_ok=True)
+            if self.is_train:
+                print("Copying training files to scratch...")
+                for f in tqdm(self.npy_train_files):
+                    if not os.path.isfile(os.path.normpath(scratch_dir + f)):
+                        shutil.copy(f, os.path.normpath(scratch_dir + f))
+
+                while len(glob.glob(self.scratch_dir + '/*.npy')) < len(self.npy_train_files):
+                    print(len(glob.glob(self.scratch_dir + '/*.npy')))
+                    print(len(self.npy_train_files))
+                    time.sleep(1)
+
+                self.scratch_files_train = glob.glob(self.scratch_dir + '/*.npy')
+                print(len(self.scratch_files_train))
+                print(len(self.npy_train_files))
+                assert len(self.scratch_files_train) == len(self.npy_train_files)
+
+            if not self.is_train:
+                print("Copying test files to scratch...")
+                for f in tqdm(self.npy_test_files):
+                    if not os.path.isfile(os.path.normpath(scratch_dir + f)):
+                        shutil.copy(f, os.path.normpath(scratch_dir + f))
+
+                while len(glob.glob(self.scratch_dir + '/*.npy')) < len(self.npy_test_files):
+                    time.sleep(1)
+
+                self.scratch_files_test = glob.glob(self.scratch_dir + '/*.npy')
+                assert len(self.scratch_files_test) == len(self.npy_test_files)
+
+    def __len__(self):
+        if self.is_train:
+            return len(self.npy_train_files)
+        else:
+            return len(self.npy_test_files)
+
+    def get_data(self):
+        if self.is_train:
+            return self.npy_train_files
+        else:
+            return self.npy_test_files
+
+
+
+def npy_data(npy_dir, scratch_dir, train_size, train, copy_files, is_correct_phase):
+    npy_data = NumpyPathDataset(npy_dir, scratch_dir, train, train_size, copy_files, is_correct_phase)
+
+    dataset = tf.data.Dataset.from_tensor_slices(npy_data.get_data())
+
+    dataset = dataset.shuffle(len(npy_data))
+
+    return dataset, npy_data
+
+
 if __name__ == '__main__':
 
     npy_data = NumpyPathDataset('/lustre4/2/managed_datasets/LIDC-IDRI/npy/average/4x4/', '/scratch-local', copy_files=True,
                                 is_correct_phase=True)
 
-    dataset = tf.data.Dataset.from_tensor_slices(npy_data.scratch_files)
-
-    # def load(x):
-    #     x = np.load(x.numpy().decode('utf-8'))[np.newaxis, ...]
-    #     return x
+    dataset = tf.data.Dataset.from_tensor_slices(npy_data.get_data())
 
 
     # Lay out the graph.

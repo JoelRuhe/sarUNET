@@ -1,0 +1,13 @@
+#!/bin/sh
+#SBATCH -N 1
+#SBATCH -n 4
+#SBATCH -p gpu_short
+#SBATCH -t 01:00:00
+
+. $HOME/envs/py36_tf115_hvd019/setup.sh
+
+cd $HOME/sarUNET/3D/
+
+mpirun -np 4 -npernode 4 python -u main.py --dataset_root /nfs/managed_datasets/LIDC-IDRI/npy/average/ --image_size 64 --batch_size 2 --gpu --horovod
+
+# sbatch run_gpu.jb
