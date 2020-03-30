@@ -1,4 +1,6 @@
 from tensorflow.python.ops import array_ops
+import numpy as np
+import ast
 
 
 def image_grid(input_tensor, grid_shape, image_shape=(32, 32), num_channels=3):
@@ -86,3 +88,50 @@ def uniform_box_sampler(arr, min_width, max_width):
         stop = start + int(np.random.uniform(mn, mx + 1))
         slices.append(slice(start, stop))
     return slices, arr[slices]
+
+def parse_tuple(string):
+    s = ast.literal_eval(str(string))
+    return s
+
+#
+# def uniform_box_sampler(x, min_width, max_width):
+#     """
+#     Extracts a sample cut from `arr`.
+#     Parameters:
+#     -----------
+#     arr : array
+#         The numpy array to sample a box from
+#     min_width : int or tuple
+#         The minimum width of the box along a given axis.
+#         If a tuple of integers is supplied, it my have the
+#         same length as the number of dimensions of `arr`
+#     max_width : int or tuple
+#         The maximum width of the box along a given axis.
+#         If a tuple of integers is supplied, it my have the
+#         same length as the number of dimensions of `arr`
+#     Returns:
+#     --------
+#     (slices, x) : A tuple of the slices used to cut the sample as well as
+#     the sampled subsection with the same dimensionality of arr.
+#         slice :: list of slice objects
+#         x :: array object with the same ndims as arr
+#     """
+#
+#     x = x
+#
+#     if isinstance(min_width, (tuple, list)):
+#         assert len(min_width) == arr.ndim, 'Dimensions of `min_width` and `arr` must match'
+#
+#     else:
+#         min_width = (min_width,) * arr.ndim
+#     if isinstance(max_width, (tuple, list)):
+#         assert len(max_width) == arr.ndim, 'Dimensions of `max_width` and `arr` must match'
+#     else:
+#         max_width = (max_width,) * arr.ndim
+#
+#     slices = []
+#     for dim, mn, mx in zip(arr.shape, min_width, max_width):
+#         start = int(np.random.uniform(0, dim))
+#         stop = start + int(np.random.uniform(mn, mx + 1))
+#         slices.append(slice(start, stop))
+#     return slices, arr[slices]

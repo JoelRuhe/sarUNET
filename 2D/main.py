@@ -8,6 +8,7 @@ import time
 import random
 import numpy as np
 from networks.blocks import contracting_block, bottleneck, crop_and_concat, expansion_block, final_layer
+from utils import uniform_box_sampler
 
 
 def forward(x, args):
@@ -22,20 +23,26 @@ def forward(x, args):
 
     for i in range(num_downsamples):
         with tf.variable_scope("contract_" + str(i)):
+            print(x.shape, 'convs')
             num_channels = args.base_channels if i == 0 else x.shape[1] * 2
             x = contracting_block(x, num_channels, activation=args.activation, param=args.leakiness)
             tensor_list.append(x)
             # TODO: Replace with bilinear up/down
             x = maxpool2d(x, (2, 2), (2, 2))
 
+    print(x.shape, 'last conv')
     x = bottleneck(x, x.shape[1] * 2, activation=args.activation, param=args.leakiness)
 
     for i in reversed(range(len(tensor_list) - 1)):
+        print(x.shape, 'trans_conv: ' + str(i))
         x = crop_and_concat(x, tensor_list[i + 1], crop=True)
         with tf.variable_scope("expand_" + str(i)):
             # TODO: Replace with bilinear up/down
+            print(x.shape[1] // 2, "hier 1")
+            print(x.shape[1] // 4, "hier 2")
             x = expansion_block(x, x.shape[1] // 2, x.shape[1] // 4, activation=args.activation, param=args.leakiness)
 
+    print(x.shape, 'SHAPE BEGIN FINAL')
     x = crop_and_concat(x, tensor_list[0], crop=True)
 
     with tf.variable_scope("expand_" + str(len(tensor_list))):
@@ -82,9 +89,28 @@ def main(args, config):
     image_channels = image_input.shape[1]
     image_input = tf.ensure_shape(image_input, [args.batch_size, image_channels, args.image_size, args.image_size])
 
-    x_input = image_input + tf.random.normal(shape=image_input.shape) * args.noise_strength
-    x_input = x_input + tf.random.uniform(shape=x_input.shape) * args.noise_strength
+    # x_input = image_input + tf.random.normal(shape=image_input.shape) * args.noise_strength
+    # x_input = image_input + tf.random.gamma(shape=x_input.shape, alpha=0.05)
+    # x_input = x_input + tf.random.uniform(shape=x_input.shape) * args.noise_strength
+    # x_input = x_input + tf.random.poisson(lam=0.3, shape=x_input.shape)
 
+    rand_batch1 = np.random.rand(*image_input.shape) * 1
+    noise_black_patches1 = rand_batch1.copy()
+
+    # x_input = image_input + tf.random.normal(shape=image_input.shape) * args.noise_strength
+    # x_input = image_input + tf.random.gamma(shape=x_input.shape, alpha=0.1)
+    # x_input = x_input + tf.random.uniform(shape=x_input.shape) * args.noise_strength
+    # x_input = x_input + tf.random.poisson(lam=0.1, shape=x_input.shape)
+
+    for i in range(image_input.shape[0]):
+        for _ in range(15):
+            arr_slices = uniform_box_sampler(noise_black_patches1, min_width=(1, 2, 4, 4),
+                                             max_width=(1, 4, 8, 8))[0]
+            noise_black_patches1[arr_slices] = 0
+
+    # x_input = image_input + noise_black_patches1
+    x_input = image_input + tf.random.normal(shape=image_input.shape) * 100000
+    x_input = x_input + tf.random.uniform(shape=image_input.shape) * 100000
 
     y = image_input
 
@@ -141,6 +167,10 @@ def main(args, config):
             epoch_loss_test = 0
             num_train_steps = len(imagenet_data_train) // global_batch_size
             num_test_steps = len(imagenet_data_test) // global_batch_size
+            # print(global_batch_size, 'global batch size')
+            # print(len(imagenet_data_test), 'LENGTH IMAGENET DATA TEST')
+            # print(num_train_steps, 'NUM TRAIN STEPS')
+            # print(num_test_steps, 'NUM TEST STEPS')
             train = True
             for i in range(num_train_steps):
                 _, summary, c = sess.run([train_step, image_summary_train, loss], feed_dict={is_train: train})
@@ -154,8 +184,10 @@ def main(args, config):
             train = False
             for i in range(num_test_steps):
                 c = sess.run(loss, feed_dict={is_train: train})
+                # print(c, 'test loss c')
             if verbose:
                 epoch_loss_test += c
+                # print(epoch_loss_test, 'epoch loss')
                 writer.add_summary(tf.Summary(value=[
                     tf.Summary.Value(tag='loss_test', simple_value=epoch_loss_test / num_test_steps)]), global_step)
                 test_image_summary = sess.run(image_summary_test, feed_dict={is_train: train})
@@ -177,11 +209,11 @@ if __name__ == "__main__":
     parser.add_argument('--batch_size', type=int, default=128)
     parser.add_argument('--scratch_path', type=str, default=f'/scratch/{os.environ["USER"]}/')
     parser.add_argument('--loss_fn', default='mean_squared_error', choices=['mean_squared_error'])
-    parser.add_argument('--noise_strength', type=float, default=0.1)
+    parser.add_argument('--noise_strength', type=float, default=0.03)
     parser.add_argument('--activation', type=str, default='leaky_relu')
     parser.add_argument('--leakiness', type=float, default=0.2)
     parser.add_argument('--num_labels', default=2, type=int)
-    parser.add_argument('--epochs', default=100, type=int)
+    parser.add_argument('--epochs', default=100000, type=int)
     parser.add_argument('--base_channels', default=64, type=int, help='Controls network complexity (parameters).')
     parser.add_argument('--learning_rate', default=1e-5, type=float)
     parser.add_argument('--logging_interval', default=8, type=int)

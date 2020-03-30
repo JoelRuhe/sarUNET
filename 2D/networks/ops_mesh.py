@@ -1,7 +1,9 @@
 import tensorflow as tf
 import numpy as np
 import horovod.tensorflow as hvd
-
+import mesh_tensorflow as mtf
+import functools
+import operator
 
 def k(x):
     """Don't use kernels smaller than actual size."""
@@ -79,20 +81,16 @@ def dense(x, fmaps, activation, lrmul=1, param=None):
     return tf.matmul(x, w)
 
 
-def conv2d(x, fmaps, kernel, activation, param=None, lrmul=1):
-    w = get_weight([*kernel, x.shape[1].value, fmaps], activation, param=param, lrmul=lrmul)
-    return tf.nn.conv2d(x, w, strides=[1, 1, 1, 1], padding='SAME', data_format='NCHW')
+def conv2d(x, output_shape, kernel):
+    return mtf.relu(mtf.layers.conv2d(x, output_shape, filter_size=kernel, strides=[1, 1], padding="SAME"))
 
 
-def conv2d_transpose(x, fmaps, kernel, activation, param=None, lrmul=1):
-    output_shape = tf.stack([x.shape[0].value, fmaps, int(x.shape[2].value*2), int(x.shape[2].value*2)])
-    w = get_weight([*kernel, x.shape[1].value, fmaps], activation, param=param, lrmul=lrmul)
-    w = tf.transpose(w, perm=[0, 1, 3, 2])
-    return tf.nn.conv2d_transpose(x, w, output_shape, strides=[2, 2], padding='SAME', data_format='NCHW')
+def conv2d_transpose(x, fmaps, kernel):
+    return mtf.layers.conv2d_transpose(x, fmaps, kernel, strides=[2, 2], padding='SAME')
 
 
-def maxpool2d(x, pool_size, strides, padding, data_format):
-    return tf.nn.max_pool2d(x, pool_size, strides, padding, data_format)
+def maxpool2d(x, ksize, strides, padding=True):
+    return _tf_restore_batch_dims(tf.nn.max_pool2d(x, ksize, strides, padding), 4, x)
 
 
 def conv3d(x, fmaps, kernel, activation, param=None, lrmul=1):
@@ -185,24 +183,42 @@ def horovod_batch_normalization(x, is_training=True, decay=.9, data_format='chan
 
     return tf.nn.batch_normalization(x, global_mean, global_var, offset=beta, scale=gamma, variance_epsilon=1e-8)
 
-def num_filters(phase, num_phases, base_dim=None, size=None):
-    if size == 'xxs':
-        filter_list = [256, 256, 64, 32, 16, 8, 4, 2]
-    elif size == 'xs':
-        filter_list = [256, 256, 64, 64, 32, 16, 8, 4]
-    elif size == 's':
-        filter_list = [512, 512, 128, 128, 64, 32, 16, 8]
-    elif size == 'm':
-        filter_list = [1024, 1024, 256, 256, 128, 64, 32, 16]
-    elif size == 'l':
-        filter_list = [2048, 2048, 512, 512, 256, 128, 64, 32]
-    elif size == 'xl':
-        filter_list = [4096, 4096, 1024, 1024, 512, 256, 128, 64]
-    elif size == 'xxl':
-        filter_list = [8192, 8192, 2048, 1024, 1024, 512, 256, 128]
-    else:
-        raise ValueError(f"Unknown size: {size}")
-    # filter_list = filter_list[-num_phases:]
-    assert len(filter_list) == 8, "Filter lists are built for LIDC-IDRI dataset."
-    filters = filter_list[phase - 1]
-    return filters
+
+def _tf_restore_batch_dims(x, num_nonbatch_dims, prototype):
+  """Reverse op of _tf_flatten_batch_dims.
+  Un-flatten the first dimension of x to match all but the last
+  num_nonbatch_dims dimensions of prototype.
+  Args:
+    x: a tf.Tensor with 1 + num_nonbatch_dims dimensions
+    num_nonbatch_dims: an integer
+    prototype: a tf.Tensor
+  Returns:
+    a tf.Tensor
+  """
+  assert x.shape.ndims == 1 + num_nonbatch_dims
+  new_shape = (
+      prototype.shape.as_list()[:-num_nonbatch_dims] + x.shape.as_list()[1:])
+  assert None not in new_shape
+  if new_shape != x.shape.as_list():
+    x = tf.reshape(x, new_shape)
+  return x
+
+
+def _tf_flatten_batch_dims(x, num_nonbatch_dims):
+  """Flatten all but last num_nonbatch_dims into one dimension.
+  Args:
+    x: a tf.Tensor:
+    num_nonbatch_dims: an integer
+  Returns:
+    a tf.Tensor with 1 + num_nonbatch_dims dimensions.
+  """
+  shape = x.shape.as_list()
+  assert None not in shape
+  new_shape = ([list_product(shape[:-num_nonbatch_dims])]
+               + shape[-num_nonbatch_dims:])
+  if new_shape != shape:
+    x = tf.reshape(x, new_shape)
+  return x
+
+def list_product(l):
+  return functools.reduce(operator.mul, l, 1)

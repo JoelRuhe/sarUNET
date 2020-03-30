@@ -16,8 +16,6 @@ def contracting_block(x, out_channels, activation, param=None, is_training=True)
         x = conv2d(x, x.shape[1].value, kernel, activation, param)
         x = act(x, activation, param)
 
-        print(x.shape)
-
     return x
 
 
@@ -41,8 +39,6 @@ def bottleneck(x, out_channels, activation, param=None, is_training=True):
         kernel = [k(s) for s in shape]
         x = conv2d_transpose(x, out_channels // 2, kernel, activation, param)
         x = act(x, activation, param)
-
-        print(x.shape, 'BOTTLENECK')
 
     return x
 
