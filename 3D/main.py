@@ -185,12 +185,12 @@ def main(args, config):
         num_train_steps = train_size // global_batch_size
         num_test_steps = test_size // global_batch_size
 
-        for epoch in range(args.epochs):
+        for epoch in range(args.epochs1):
             epoch_loss_train = 0
             epoch_loss_test = 0
 
             # TRAINING
-            for i in tqdm(range(num_train_steps)):
+            for i in range(num_train_steps):
 
                 #prepare trainingbatch
                 batch_loc = np.random.randint(num_test_steps, len(npy_data) - args.batch_size)
@@ -207,7 +207,7 @@ def main(args, config):
                     epoch_loss_train += c
 
             # TESTING
-            for i in tqdm(range(num_test_steps)):
+            for i in range(num_test_steps):
 
                 #prepare testbatch
                 batch_loc = np.random.randint(0, num_test_steps - args.batch_size)

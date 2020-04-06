@@ -8,6 +8,6 @@
 
 cd $HOME/sarUNET/3D/
 
-mpirun -np 4 -npernode 4 python -u main.py --dataset_root /nfs/managed_datasets/LIDC-IDRI/npy/average/ --image_size 64 --batch_size 2 --gpu --horovod
+mpirun -np 4 -npernode 4 python -u main.py --dataset_root /nfs/managed_datasets/LIDC-IDRI/npy/average/ --image_size 256 --batch_size 1 --gpu --horovod
 
 # sbatch run_gpu.jb

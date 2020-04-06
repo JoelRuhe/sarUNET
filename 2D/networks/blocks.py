@@ -8,7 +8,6 @@ def contracting_block(x, out_channels, activation, param=None, is_training=True)
         kernel = [k(s) for s in shape]
         x = conv2d(x, out_channels, kernel, activation, param)
         x = act(x, activation, param)
-        # x = horovod_batch_normalization(x)
 
     with tf.variable_scope("conv_2"):
         shape = x.get_shape().as_list()[1:3]

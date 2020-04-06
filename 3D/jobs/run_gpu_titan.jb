@@ -2,11 +2,12 @@
 #SBATCH -N 1
 #SBATCH -n 4
 #SBATCH -p gpu_titanrtx
-#SBATCH -t 05:00:00
+#SBATCH -t 1-00:00:00
 
 . $HOME/envs/py36_tf115_hvd019/setup.sh
 
 cd $HOME/sarUNET/3D/
-mpirun -np 4 -npernode 4 python -u main.py --dataset imagenet --dataset_root /nfs/managed_datasets/imagenet-full/ --image_size 256 --batch_size 16 --gpu --horovod --num_labels=150
 
-# sbatch run_gpu.jb
+mpirun -np 4 -npernode 4 python -u main.py --dataset_root /nfs/managed_datasets/LIDC-IDRI/npy/average/ --image_size 256 --batch_size 1 --gpu --horovod
+
+# sbatch run_gpu_titan.jb

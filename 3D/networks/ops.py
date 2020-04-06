@@ -185,6 +185,7 @@ def horovod_batch_normalization(x, is_training=True, decay=.9, data_format='chan
 
     return tf.nn.batch_normalization(x, global_mean, global_var, offset=beta, scale=gamma, variance_epsilon=1e-8)
 
+
 def num_filters(phase, num_phases, base_dim=None, size=None):
     if size == 'xxs':
         filter_list = [256, 256, 64, 32, 16, 8, 4, 2]
