@@ -1,4 +1,10 @@
 .idea
+intelAI/
+2D/runs/
+2D/jobs/
+3D/runs/
+3D/runtests/
+3D/jobs
 runs
 __pycache__
 .DS_Store
