@@ -21,7 +21,12 @@ This will make the 3D model run. Further information about the flags is given be
 **--horovod** = Use horovod for data parallelism over multiple Nodes and gpu's. Default is ```False```.      
 **--scratch_path** = Path to where the data should be copied to.  
 
+## Results
+Below are 3 images. The first is the original, second is with added noise and the third is the denoised one (remake). 
 
+![Image of UNET model](https://github.com/JoelRuhe/sarUNET/blob/master/images/results/original.png)
+![Image of UNET model](https://github.com/JoelRuhe/sarUNET/blob/master/images/results/noise.png)
+![Image of UNET model](https://github.com/JoelRuhe/sarUNET/blob/master/images/results/remake.png)
 
 
 ![Image of UNET model](https://github.com/JoelRuhe/sarUNET/blob/master/images/UNET%20model.png)
