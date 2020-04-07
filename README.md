@@ -9,7 +9,7 @@ cd 3D/
 ```
 
 ```
-python main.py --dataset_root /nfs/managed_datasets/LIDC-IDRI/npy/average/ --scratch_path /scratch/USER/ --image_size 32 --batch_size 1 --gpu 
+python main.py --dataset_root /nfs/managed_datasets/LIDC-IDRI/npy/average/ --scratch_path /scratch/USER/ --image_size 32 --batch_size 1 --gpu --horovod
 ```
 
 This will make the 3D model run. Further information about the flags is given below:
