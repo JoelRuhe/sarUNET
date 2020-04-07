@@ -234,11 +234,11 @@ def main(args, config):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument('--image_size', type=int, help="'height or width, eg: 128'")
-    parser.add_argument('--batch_size', type=int)
+    parser.add_argument('--image_size', type=int, required=True, help="'height or width, eg: 128'")
+    parser.add_argument('--batch_size', required=True, type=int)
     parser.add_argument('--train', default=True, type=bool)
     parser.add_argument('--dataset_root', type=str, required=True)
-    parser.add_argument('--scratch_path', type=str, default='/scratch/joelr/')
+    parser.add_argument('--scratch_path', type=str, required=True)
     parser.add_argument('--data_format', type=str, default='NCDHW')
     parser.add_argument('--noise_strength', type=float, default=0.003)
     parser.add_argument('--loss_fn', default='mean_squared_error', choices=['mean_squared_error'])
