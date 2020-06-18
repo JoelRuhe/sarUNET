@@ -27,12 +27,12 @@ This will make the 3D model run. Further information about the flags is given be
 ### Results
 Below are 3 images. The first is the original, second is with added noise and the third is the denoised one (remake). 
 
-![Image of UNET model](https://github.com/JoelRuhe/sarUNET/blob/master/images/results/original.png)
-![Image of UNET model](https://github.com/JoelRuhe/sarUNET/blob/master/images/results/noise.png)
-![Image of UNET model](https://github.com/JoelRuhe/sarUNET/blob/master/images/results/remake.png)
+![Original image](https://github.com/JoelRuhe/sarUNET/blob/master/Results/original.png)
+![Image with added noise](https://github.com/JoelRuhe/sarUNET/blob/master/Results/noise.png)
+![Remade image](https://github.com/JoelRuhe/sarUNET/blob/master/Results/remake.png)
 
 
-![Image of UNET model](https://github.com/JoelRuhe/sarUNET/blob/master/images/UNET%20model.png)
+![Image of UNET model](https://github.com/JoelRuhe/sarUNET/blob/master/Results/UNETmodel.png)
 
 ## Brain Tumor Segmentation
 This section describes the instructions that are needed to run the Segmentation task.
