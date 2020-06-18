@@ -1,7 +1,10 @@
 # sarUNET
-The sarUNET is a deep learning UNET model developed for improving 3D Conebeam CT image quality so they will get the quality of a normal CT image. This UNET model consists of a number of convolution layers, a bottleneck and then a number of deconvolutional layers. At the end of the readme, an illustration of the UNET model is shown.
+The sarUNET is a deep learning UNET model developed for improving 3D cone beam CT image quality and brain tumor segmentation purposes. This UNET model consists of a number of convolution layers, a bottleneck and then a number of deconvolutional layers. At the end of the readme, an illustration of the UNET model is shown. The dataset that has been used for the cone beam CT improvment is the LIDC-IDRI data set. The data set that has been used for the brain tumor segmentation is the brats2015 data set.
 
-## Instructions
+## Cone beam CT improvement
+This section describes what instructions are needed to run the 3D unet model and some results of the are shown.
+
+### Instructions
 Below are some instructions given to run the 3D UNET model:
 
 ```
@@ -15,13 +18,13 @@ python main.py --dataset_root /nfs/managed_datasets/LIDC-IDRI/npy/average/ --scr
 This will make the 3D model run. Further information about the flags is given below:
 
 **--dataset_root** = Path to the dataset (Required).  
+**--scratch_path** = Path to where the data should be copied to (Required).  
 **--image_size** = Size of the image to be trained. Can be 32, 64, 128, 256 and 512 where the depth is divided by four (eg: 32x32x8) (Required).  
-**--batch_size** = Batch size.  
+**--batch_size** = Batch size (Required). 
 **--gpu** = Use gpu configuration for training the model.  
 **--horovod** = Use horovod for data parallelism over multiple Nodes and gpu's. Default is ```False```.      
-**--scratch_path** = Path to where the data should be copied to.  
 
-## Results
+### Results
 Below are 3 images. The first is the original, second is with added noise and the third is the denoised one (remake). 
 
 ![Image of UNET model](https://github.com/JoelRuhe/sarUNET/blob/master/images/results/original.png)
@@ -30,3 +33,27 @@ Below are 3 images. The first is the original, second is with added noise and th
 
 
 ![Image of UNET model](https://github.com/JoelRuhe/sarUNET/blob/master/images/UNET%20model.png)
+
+## Brain Tumor Segmentation
+This section describes the instructions that are needed to run the Segmentation task.
+
+### Instructions
+```
+cd Segmentation/
+```
+
+```
+python main.py --dataset_root /path/to/npy/directory/ --scratch_path /scratch/USER/ --batch_size 1 --gpu --horovod
+```
+
+**--dataset_root** = Path to the npy dataset (Required).  
+**--scratch_path** = Path to where the data should be copied to (Required).  
+**--batch_size** = Batch size (Required). <br />
+**--image_type** = The input image type. Can be 'T1', 'T1c', 'Flair', 'T2' (Default = T1c).<br />
+**--image_tissue** = LGG tumors are slow growing tumors where as HGG are fast growing. Choises are 'HGG' or 'LGG' (Default = HGG). <br />
+**--gpu** = Use gpu configuration for training the model.  
+**--horovod** = Use horovod for data parallelism over multiple Nodes and gpu's. Default is ```False```.  
+
+### Results
+
+
