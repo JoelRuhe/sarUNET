@@ -22,32 +22,45 @@ def forward(x, args):
 
     for i in range(num_downsamples):
         with tf.variable_scope("contract" + str(i)):
-            x = contracting_block(x, args.first_output_channels, activation=args.activation, param=args.leakiness)
+            x = contracting_block(x, args.first_output_channels, args.data_format, activation=args.activation, param=args.leakiness)
             #add tensor to list for later usage in Expanse
             tensor_list.append(x)
-            x = maxpool3d(x, (2, 2, 2), (2, 2, 2), padding="SAME", data_format=args.data_format)
-            args.first_output_channels = x.shape[1].value * 2
+            x = maxpool3d(x, (2, 2, 2), (2, 2, 2), args.data_format, padding="SAME")
+            if args.data_format == "NCDHW":
+                args.first_output_channels = x.shape[1].value * 2
+            else:
+                args.first_output_channels = x.shape[4].value * 2
 
     # BOTTLENECK
-
-    x = bottleneck(x, x.shape[1].value * 2, activation=args.activation, param=args.leakiness)
+    if args.data_format == "NCDHW":
+        x = bottleneck(x, x.shape[1].value * 2, args.data_format, activation=args.activation, param=args.leakiness)
+    else:
+        x = bottleneck(x, x.shape[4].value * 2, args.data_format, activation=args.activation, param=args.leakiness)
 
     # EXPANSE
-
+    print(x.shape, 'decode first')
     for i in reversed(range(len(tensor_list) - 1)):
-        x = crop_and_concat(x, tensor_list[i + 1], crop=True)
+        x = crop_and_concat(x, tensor_list[i + 1], args.data_format, crop=True)
+        print(x.shape, 'concat')
         with tf.variable_scope("expanse" + str(i)):
-            x = expansion_block(x, x.shape[1].value // 2, x.shape[1].value // 4, activation=args.activation,
-                                param=args.leakiness)
+            if args.data_format == "NCDHW":
+                print("TEST2")
+                x = expansion_block(x, x.shape[1].value // 2, x.shape[1].value // 4, args.data_format, activation=args.activation, param=args.leakiness)
+                print(x, 'X.SHAPE 2')
+            else:
+                x = expansion_block(x, x.shape[4].value // 2, x.shape[4].value // 4, args.data_format, activation=args.activation, param=args.leakiness)
+
+            print(x.shape, 'decode')
 
     # FINAL
 
-    x = crop_and_concat(x, tensor_list[0], crop=True)
+    x = crop_and_concat(x, tensor_list[0], args.data_format, crop=True)
 
     with tf.variable_scope("final"):
-        x = final_layer(x, x.shape[1].value // 2, args.final_output_channels, activation=args.activation,
-                        param=args.leakiness)
-
+        if args.data_format == "NCDHW":
+            x = final_layer(x, x.shape[1].value // 2, args.final_output_channels, args.data_format, activation=args.activation, param=args.leakiness)
+        else:
+            x = final_layer(x, x.shape[4].value // 2, args.final_output_channels, args.data_format, activation=args.activation, param=args.leakiness)
     return x
 
 
@@ -62,7 +75,7 @@ def main(args, config):
     global_batch_size = args.batch_size * hvd.size() if args.horovod else args.batch_size
 
     timestamp = time.strftime("%Y-%m-%d_%H:%M:%S", time.gmtime())
-    logdir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'runtests', timestamp)
+    logdir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'runs', timestamp)
 
     global_step = 0
 
@@ -82,9 +95,18 @@ def main(args, config):
     if args.horovod:
         dataset.shard(hvd.size(), hvd.rank())
 
-    current_shape = [args.batch_size, args.image_channels, args.image_size // 4, args.image_size, args.image_size]
+    if args.data_format == "NCDHW":
+        current_shape = [args.batch_size, args.image_channels, args.image_size // 4, args.image_size, args.image_size]
+    else:
+        current_shape = [args.batch_size, args.image_size // 4, args.image_size, args.image_size, args.image_channels]
+
     real_image_input = tf.placeholder(shape=current_shape, dtype=tf.float32)
 
+    # print(real_image_input.shape, 'FIRST')
+    # if args.data_format == "NDHWC":
+    #     print("TESSEST")
+    #     real_image_input = tf.transpose(real_image_input, perm=[0, 2, 3, 4, 1])
+    #     print(real_image_input, 'SECOND')
     # ------------------ NOISE ----------------
 
     rand_batch1 = np.random.rand(*real_image_input.shape) * 0.5
@@ -97,9 +119,10 @@ def main(args, config):
 
     #add box_sampler noise which mimics conebeam noise
     for i in range(real_image_input.shape[0]):
-        for _ in range(200):
-            arr_slices = uniform_box_sampler(noise_black_patches1, min_width=(1, 1, 2, 4, 4),
-                                             max_width=(1, 1, 4, 8, 8))[0]
+        for _ in range(100):
+            arr_slices = uniform_box_sampler(noise_black_patches1, min_width=(1, 1, 1, 3, 3),
+                                             max_width=(1, 1, 3, 6, 6))[0]
+
             noise_black_patches1[arr_slices] = 0
 
     x_input = real_image_input + noise_black_patches1
@@ -124,15 +147,23 @@ def main(args, config):
     train_step = optimizer.minimize(loss)
 
     # ------------- SUMMARIES -------------
-    train_input = tf.transpose(x_input[0], (1, 2, 3, 0))
-    prediction_input = tf.transpose(prediction[0], (1, 2, 3, 0))
-    real_input = tf.transpose(y[0], (1, 2, 3, 0))
+    if args.data_format == "NCDHW":
+        train_input = tf.transpose(x_input[0], (1, 2, 3, 0))
+        prediction_input = tf.transpose(prediction[0], (1, 2, 3, 0))
+        real_input = tf.transpose(y[0], (1, 2, 3, 0))
+    else:
+        train_input = tf.transpose(x_input[0], (0, 1, 2, 3))
+        prediction_input = tf.transpose(prediction[0], (0, 1, 2, 3))
+        real_input = tf.transpose(y[0], (0, 1, 2, 3))
 
     prediction_input = tf.clip_by_value(prediction_input, clip_value_min=args.clip_value_min,
                                         clip_value_max=args.clip_value_max)
 
     #transform images into grid
     shape = train_input.get_shape().as_list()
+    image_shape = shape[1:3]
+    print(shape)
+    print(image_shape)
     grid_cols = int(2 ** np.floor(np.log(np.sqrt(shape[0])) / np.log(2)))
     grid_rows = shape[0] // grid_cols
     grid_shape = [grid_rows, grid_cols]
@@ -185,7 +216,7 @@ def main(args, config):
         num_train_steps = train_size // global_batch_size
         num_test_steps = test_size // global_batch_size
 
-        for epoch in range(args.epochs1):
+        for epoch in range(args.epochs):
             epoch_loss_train = 0
             epoch_loss_test = 0
 
@@ -197,6 +228,8 @@ def main(args, config):
                 batch_paths = npy_data[batch_loc: batch_loc + args.batch_size]
                 batch = np.stack(np.load(path) for path in batch_paths)
                 batch = batch[:, np.newaxis, ...].astype(np.float32) / 1024 - 1
+                if args.data_format == "NDHWC":
+                    batch = np.transpose(batch, (0,2,3,4,1))
 
                 _, summary, c = sess.run([train_step, image_summary_train, loss], feed_dict={real_image_input: batch})
 
@@ -214,6 +247,9 @@ def main(args, config):
                 batch_paths = npy_data[batch_loc: batch_loc + args.batch_size]
                 batch = np.stack(np.load(path) for path in batch_paths)
                 batch = batch[:, np.newaxis, ...].astype(np.float32) / 1024 - 1
+
+                if args.data_format == "NDHWC":
+                    batch = np.transpose(batch, (0, 2, 3, 4, 1))
 
                 c = sess.run(loss, feed_dict={real_image_input: batch})
 

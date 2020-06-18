@@ -77,10 +77,10 @@ class NumpyPathDataset:
         self.scratch_files = glob.glob(self.scratch_dir + '/*.npy')
         assert len(self.scratch_files) == len(self.npy_files)
 
-        test_npy_array = np.load(self.npy_files[0])[np.newaxis, ...]
-        self.shape = test_npy_array.shape
-        self.dtype = test_npy_array.dtype
-        del test_npy_array
+        # test_npy_array = np.load(self.npy_files[0])[np.newaxis, ...]
+        # self.shape = test_npy_array.shape
+        # self.dtype = test_npy_array.dtype
+        # del test_npy_array
 
     def __iter__(self):
         for path in self.npy_files:

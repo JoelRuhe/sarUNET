@@ -107,6 +107,9 @@ def crop_and_concat(upsampled, bypass, dataformat, crop=False):
 
     if crop:
         if dataformat == "NCDHW":
+            if bypass.shape[4].value == 155:
+                bypass = tf.pad(bypass, ([0,0],[0,0],[0,0],[0,0],[1,0]))
+                print(bypass.shape, 'bypass2')
             d = (bypass.shape[2].value - upsampled.shape[2].value) // 2
             h = (bypass.shape[3].value - upsampled.shape[3].value) // 2
             w = (bypass.shape[4].value - upsampled.shape[4].value) // 2

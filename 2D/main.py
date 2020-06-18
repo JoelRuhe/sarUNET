@@ -212,7 +212,7 @@ if __name__ == "__main__":
     parser.add_argument('--noise_strength', type=float, default=0.03)
     parser.add_argument('--activation', type=str, default='leaky_relu')
     parser.add_argument('--leakiness', type=float, default=0.2)
-    parser.add_argument('--num_labels', default=2, type=int)
+    parser.add_argument('--num_labels', default=1, type=int)
     parser.add_argument('--epochs', default=100000, type=int)
     parser.add_argument('--base_channels', default=64, type=int, help='Controls network complexity (parameters).')
     parser.add_argument('--learning_rate', default=1e-5, type=float)
