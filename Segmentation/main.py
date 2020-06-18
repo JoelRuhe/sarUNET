@@ -27,25 +27,11 @@ def main(args, config):
         MRIdataset = load_dataset(args, False)
 
 
-    if args.image_size == 128:
-        if args.data_format == "NCDHW":
-            current_shape = [args.batch_size, args.image_channels, args.image_size, args.image_size, args.image_size]
-        else:
-            current_shape = [args.batch_size, args.image_size, args.image_size, args.image_size, args.image_channels]
+    if args.data_format == "NCDHW":
+        current_shape = [args.batch_size, args.image_channels, args.image_size, args.image_size, args.image_size]
+    else:
+        current_shape = [args.batch_size, args.image_size, args.image_size, args.image_size, args.image_channels]
 
-    elif args.image_size == 256:
-        if args.data_format == "NCDHW":
-            current_shape = [args.batch_size, args.image_channels, 128, args.image_size,
-                             args.image_size]
-        else:
-            current_shape = [args.batch_size, args.image_size, args.image_size, args.image_size,
-                             args.image_channels]
-
-    elif args.image_size == 512:
-        if args.data_format == "NCDHW":
-            current_shape = [args.batch_size, args.image_channels, args.image_size//2, args.image_size, args.image_size]
-        else:
-            current_shape = [args.batch_size, args.image_size//2, args.image_size, args.image_size, args.image_channels]
 
     MRI_image = tf.placeholder(shape=current_shape, dtype=tf.float32)
 
@@ -239,12 +225,9 @@ def main(args, config):
                       f'Train Loss: {epoch_loss_train / num_train_steps}\t')
 
 
-
-
-
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument('--image_size', type=int, required=True, help="'height or width, eg: 128'")
+    parser.add_argument('--image_size', default=128, type=int)
     parser.add_argument('--batch_size', required=True, type=int)
     parser.add_argument('--train', default=True, type=bool)
     parser.add_argument('--dataset_root', type=str, required=True)
@@ -261,7 +244,7 @@ if __name__ == "__main__":
     parser.add_argument('--gpu', action='store_true')
     parser.add_argument('--seed', default=42, type=int)
     parser.add_argument('--horovod', default=False, action='store_true')
-    parser.add_argument('--lowest_size', default=8, type=int)
+    parser.add_argument('--lowest_size', default=16, type=int)
     parser.add_argument('--logging_interval', default=8, type=int)
     parser.add_argument('--clip_value_min', default=-1, type=int)
     parser.add_argument('--clip_value_max', default=2, type=int)
