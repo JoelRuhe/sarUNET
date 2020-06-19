@@ -295,29 +295,3 @@ if __name__ == "__main__":
 
     main(args, config)
 
-# # prepare trainingbatch
-# # batch_loc = np.random.randint(len(dataset) - args.batch_size)
-# batch_loc = np.random.randint(len(MRIdataset))
-#
-# SEG_paths = SEGdataset[batch_loc: batch_loc + args.batch_size]
-# SEGbatch = np.stack(np.load(k, allow_pickle=True) for k in SEG_paths)
-# # SEGbatch = SEGbatch[:, np.newaxis, ...].astype(np.float32) / 1024 - 1
-#
-# # MRI_paths = MRIdataset[batch_loc: batch_loc + args.batch_size]
-# # MRIbatch = np.stack(np.load(path, allow_pickle=True) for path in MRI_paths)
-# # MRIbatch = MRIbatch[:, np.newaxis, ...].astype(np.float32) / 1024 - 1
-#
-# MRI_paths = MRIdataset[batch_loc: batch_loc + args.batch_size]
-# MRIbatch = np.stack(np.load(path, allow_pickle=True) for path in MRI_paths)
-# # MRIbatch = MRIbatch[:, np.newaxis, ...].astype(np.float32) / 1024 - 1
-#
-#
-# # SEGbatch = _remove_colormap(SEGbatch)
-# SEGbatch = np.transpose(SEGbatch, (0, 4, 1, 2, 3))
-# MRIbatch = np.transpose(MRIbatch, (0, 4, 1, 2, 3))
-#
-# if args.data_format == "NDHWC":
-#     # MRIbatch = np.transpose(MRIbatch, (0, 2, 3, 4, 1))
-#     SEGbatch = np.transpose(SEGbatch, (0, 1, 4, 3, 2))
-
-# _, summary, c = sess.run([train_step, image_summary_train, loss], feed_dict={MRI_image: MRIbatch, SEG_image: SEGbatch})

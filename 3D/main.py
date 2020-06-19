@@ -89,7 +89,6 @@ def main(args, config):
     # retrieve dataset
     npy_data = NumpyPathDataset(data_path, args.scratch_path, copy_files=local_rank == 0, is_correct_phase=True)
 
-    # dataset = tf.data.Dataset.from_generator(npy_data.__iter__, npy_data.dtype, npy_data.shape)
     dataset = tf.data.Dataset.from_tensor_slices(npy_data.scratch_files)
 
     if args.horovod:
@@ -102,11 +101,7 @@ def main(args, config):
 
     real_image_input = tf.placeholder(shape=current_shape, dtype=tf.float32)
 
-    # print(real_image_input.shape, 'FIRST')
-    # if args.data_format == "NDHWC":
-    #     print("TESSEST")
-    #     real_image_input = tf.transpose(real_image_input, perm=[0, 2, 3, 4, 1])
-    #     print(real_image_input, 'SECOND')
+
     # ------------------ NOISE ----------------
 
     rand_batch1 = np.random.rand(*real_image_input.shape) * 0.5

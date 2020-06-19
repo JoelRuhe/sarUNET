@@ -6,7 +6,6 @@ import glob
 def load_dataset(args, train):
   print(train, 'TRAIN VALUE')
   image_type = args.image_type
-  # scratch_dir = '/home/joelr/scratch/'
   scratch_dir = args.scratch_path
 
   if train:
