@@ -27,9 +27,9 @@ This will make the 3D model run. Further information about the flags is given be
 ### Results
 Below are 3 images. The first is the original, second is with added noise and the third is the denoised one (remake). 
 
-![Original image](https://github.com/JoelRuhe/sarUNET/blob/master/Results/original.png)
-![Image with added noise](https://github.com/JoelRuhe/sarUNET/blob/master/Results/noise.png)
-![Remade image](https://github.com/JoelRuhe/sarUNET/blob/master/Results/remake.png)
+![Original image](https://github.com/JoelRuhe/sarUNET/blob/master/Results/CBCT%20Improvement/original.png)
+![Image with added noise](https://github.com/JoelRuhe/sarUNET/blob/master/Results/CBCT%20Improvement/noise.png)
+![Remade image](https://github.com/JoelRuhe/sarUNET/blob/master/Results/CBCT%20Improvement/remake.png)
 
 
 ![Image of UNET model](https://github.com/JoelRuhe/sarUNET/blob/master/Results/UNETmodel.png)
@@ -55,5 +55,8 @@ python main.py --dataset_root /path/to/npy/directory/ --scratch_path /scratch/US
 **--horovod** = Use horovod for data parallelism over multiple Nodes and gpu's. Default is ```False```.  
 
 ### Results
+Below are 3 images. The first is the original T1c image, the second is the predicted segmentation and the third is the actual segmentation.
 
-
+![Original image](https://github.com/JoelRuhe/sarUNET/blob/master/Results/Segmentation/original_T1c.png)
+![Image with added noise](https://github.com/JoelRuhe/sarUNET/blob/master/Results/Segmentation/prediction.png)
+![Remade image](https://github.com/JoelRuhe/sarUNET/blob/master/Results/Segmentation/segmentation_OT.png)
