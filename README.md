@@ -1,6 +1,7 @@
 # sarUNET
 The sarUNET is a deep learning UNET model developed for improving 3D cone beam CT image quality and brain tumor segmentation purposes. This UNET model consists of a number of convolution layers, a bottleneck and then a number of deconvolutional layers. At the end of the readme, an illustration of the UNET model is shown. The dataset that has been used for the cone beam CT improvment is the LIDC-IDRI data set. The data set that has been used for the brain tumor segmentation is the brats2015 data set.
-
+<br><br>
+This UNET model has been developed as part of my thesis and has been developed for SURFsara where I did my graduation internship.
 ## Cone beam CT improvement
 This section describes what instructions are needed to run the 3D unet model and some results of the are shown.
 
